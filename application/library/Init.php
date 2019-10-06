@@ -164,6 +164,21 @@ class Controller {
 
 }
 
+abstract class CommonEnum
+{
+    public static $message = [];
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
+    }
+}
+
 abstract class ActionPDO {
 
     public $_module = null;
@@ -185,7 +200,8 @@ abstract class ActionPDO {
     /**
      * 获取Http头
      */
-    protected function getRequestHeader () {
+    protected function getRequestHeader ()
+    {
         $this->_G['header'] = [];
 
         foreach ($_SERVER as $k => $v) {
@@ -350,21 +366,34 @@ abstract class ActionPDO {
         exit(0);
     }
 
-    public function loginCheck ($token = '', $clienttype = '')
+    public function loginCheck ($token = null, $clienttype = null)
     {
         if (empty($token)) {
-            if (!empty($_POST['token'])) $token = $_POST['token'];
-            elseif (!empty($_GET['token'])) $token = $_GET['token'];
-            elseif (!empty($_COOKIE['token'])) $token = $_COOKIE['token'];
+            if (!empty($_POST['token'])) {
+                $token = $_POST['token'];
+            } elseif (!empty($_GET['token'])){
+                $token = $_GET['token'];
+            } elseif (!empty($_COOKIE['token'])) {
+                $token = $_COOKIE['token'];
+            }
         }
-        if (empty($token)) return false;
-        list ($uid, $scode, $client) = explode("\t", authcode(rawurldecode($token), 'DECODE'));
+        if (empty($token)) {
+            return false;
+        }
+        $this->_G['token'] = explode("\t", authcode(rawurldecode($token), 'DECODE'));
+        list ($user_id, $scode, $client, $addr) = $this->_G['token'];
+        if (!$user_id || !$scode) {
+            return false;
+        }
+        if (!empty($addr) && $addr != $_SERVER['REMOTE_ADDR']) {
+            return false;
+        }
         $clienttype = $clienttype ? $clienttype : ($client ? $client : (defined('CLIENT_TYPE') ? CLIENT_TYPE : ''));
-        if (!$uid || !$scode) return false;
-        return \app\library\DB::getInstance()->field('userid as uid, clienttype, clientapp, stoken')
+        return \app\library\DB::getInstance()->field('user_id,clienttype,clientapp,stoken')
             ->table('__tablepre__session')
-            ->where('userid = ? and clienttype = ? and scode = ?')
-            ->bindValue($uid, $clienttype, $scode)
+            ->where('user_id = ? and clienttype = ? and scode = ?')
+            ->bindValue($user_id, $clienttype, $scode)
+            ->limit(1)
             ->find();
     }
 

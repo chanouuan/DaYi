@@ -281,8 +281,7 @@ class DbMysql extends Db {
     public function select ($query = null)
     {
         return $this->execute($this->parseTableName($query), null, function  ($statement) {
-            $rs = $statement->fetchAll();
-            return !empty($rs) ? $rs : [];
+            return $statement->fetchAll();
         });
     }
 

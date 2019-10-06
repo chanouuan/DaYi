@@ -1,5 +1,10 @@
 <?php
 
+function region_number ($num, $min, $min_limit, $max, $max_limit)
+{
+    return $num < $min ? $min_limit : ($num > $max ? $max_limit : $num);
+}
+
 function get_diff_time ($start_time, $end_time)
 {
 	if (!$start_time || !$end_time) {
