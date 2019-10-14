@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class OrderPayFlow extends CommonEnum
+class OrderPayFlow
 {
 
     const CHARGE = 1;
@@ -17,5 +15,15 @@ class OrderPayFlow extends CommonEnum
         1 => '收费',
         2 => '退费'
     ];
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
+    }
 
 }

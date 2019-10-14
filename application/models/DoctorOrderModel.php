@@ -14,11 +14,103 @@ use app\common\OrderPayFlow;
 use app\common\OrderPayWay;
 use app\common\OrderSource;
 use app\common\OrderStatus;
+use app\common\NoteAllergy;
+use app\common\Role;
 use Crud;
 
 class DoctorOrderModel extends Crud {
 
     protected $table = 'dayi_doctor_order';
+
+    /**
+     * 获取医生列表
+     * @return array
+     */
+    public function getDoctorList ($user_id)
+    {
+        // 获取用户信息
+        $userInfo = $this->getUserInfo($user_id);
+        if ($userInfo['errorcode'] !== 0) {
+            return $userInfo;
+        }
+        $userInfo = $userInfo['result'];
+        // 获取医生
+        return success((new AdminModel())->getUserByRole($userInfo['store_id'], Role::DOCTOR));
+    }
+
+    /**
+     * 获取过敏史
+     * @return array
+     */
+    public function getAllergyEnum ()
+    {
+        return success(array_values(NoteAllergy::$message));
+    }
+
+    /**
+     * 获取药品用法
+     * @param category 药品分类
+     * @return array
+     */
+    public function getUsageEnum ($category)
+    {
+        $list = [];
+        $data = [];
+        if ($category == NoteCategory::WESTERN) {
+            $data = NoteUsage::getWesternUsage();
+        } else if ($category == NoteCategory::CHINESE) {
+            $data = NoteUsage::getChineseUsage();
+        }
+        foreach ($data as $k => $v) {
+            $list[] = [
+                'id' => $k,
+                'name' => $v
+            ];
+        }
+        unset($data);
+        return success($list);
+    }
+
+    /**
+     * 获取药品频率
+     * @return array
+     */
+    public function getNoteFrequencyEnum ()
+    {
+        $list = [];
+        foreach (NoteFrequency::$message as $k => $v) {
+            $list[] = [
+                'id' => $k,
+                'name' => $v['name'],
+                'daily_count' => $v['daily_count']
+            ];
+        }
+        return success($list);
+    }
+
+    /**
+     * 搜索患者
+     * @return array
+     */
+    public function searchPatient ($post)
+    {
+        $post['name'] = trim_space($post['name']);
+        if (!$post['name'] || preg_match('/^\d+$/', $post['name'])) {
+            return success([]);
+        }
+        if (!$list = (new PatientModel())->search($post['name'])) {
+            return success([]); 
+        }
+        return success([
+            'columns' => [
+                ['key' => 'name', 'value' => '姓名'],
+                ['key' => 'sex', 'value' => '性别'],
+                ['key' => 'age', 'value' => '年龄'],
+                ['key' => 'telephone', 'value' => '手机']
+            ],
+            'rows' => $list
+        ]);
+    }
 
     /**
      * 获取登录账号信息
@@ -34,7 +126,10 @@ class DoctorOrderModel extends Crud {
         $userInfo = $userInfo['result'];
 
         // 获取诊所信息
-        $userInfo['store_info'] = (new StoreModel())->find(['id' => $userInfo['store_id']], 'id,name,address,tel,status');
+        $userInfo['store_info'] = (new StoreModel())->find(['id' => $userInfo['store_id']], 'id,name,status');
+
+        // 消息
+        $userInfo['unread_count'] = rand(1, 10); // 未读消息数
 
         return success($userInfo);
     }

@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class NoteAllergy extends CommonEnum
+class NoteAllergy
 {
 
     static $message = [
@@ -26,5 +24,15 @@ class NoteAllergy extends CommonEnum
         13 => '复方新诺明',
         14 => '苯巴比妥'
     ];
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
+    }
 
 }

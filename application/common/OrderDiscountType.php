@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class OrderDiscountType extends CommonEnum
+class OrderDiscountType
 {
 
     const NONE  = 0;
@@ -39,5 +37,14 @@ class OrderDiscountType extends CommonEnum
         return intval($money);
     }
 
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
+    }
 
 }

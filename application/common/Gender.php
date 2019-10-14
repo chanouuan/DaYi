@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class Gender extends CommonEnum
+class Gender
 {
 
     const SECRECY = 0;
@@ -74,6 +72,39 @@ class Gender extends CommonEnum
         $month = bcsub($age, $year, 2) * 100;
         $time  = mktime(0, 0, 0, date('m', TIMESTAMP) - $month, date('d', TIMESTAMP), date('Y', TIMESTAMP) - $year);
         return date('Y-m-1', $time);
+    }
+
+    /**
+     * 根据出生日期获取年龄
+     * @param $birthday 出生日期
+     * @return array
+     */
+    public static function getAgeByBirthDay ($birthday)
+    {
+        if (empty($birthday)) {
+            return [];
+        }
+        $birthday = strtotime($birthday);
+        if (!$birthday || $birthday > TIMESTAMP) {
+            return [];
+        }
+        $start_time = new \DateTime(date('Y-m-d H:i:s', $birthday));
+        $end_time   = new \DateTime(date('Y-m-d H:i:s', TIMESTAMP));
+        $interval   = $end_time->diff($start_time);
+        return [
+            'y' => $interval->y,
+            'm' => $interval->m,
+        ];
+    }
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
     }
 
 }

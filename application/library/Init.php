@@ -164,21 +164,6 @@ class Controller {
 
 }
 
-abstract class CommonEnum
-{
-    public static $message = [];
-
-    public static function format ($code)
-    {
-        return isset(self::$message[$code]) ? $code : null;
-    }
-
-    public static function getMessage ($code)
-    {
-        return isset(self::$message[$code]) ? self::$message[$code] : $code;
-    }
-}
-
 abstract class ActionPDO {
 
     public $_module = null;

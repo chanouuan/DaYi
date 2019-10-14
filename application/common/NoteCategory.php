@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class NoteCategory extends CommonEnum
+class NoteCategory
 {
 
     const WESTERN   = 1;
@@ -28,6 +26,16 @@ class NoteCategory extends CommonEnum
     public static function isDrug ($code)
     {
         return in_array($code, [self::WESTERN, self::CHINESE]);
+    }
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
     }
 
 }

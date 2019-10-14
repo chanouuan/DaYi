@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class NoteFrequency extends CommonEnum
+class NoteFrequency
 {
 
     static $message = [
@@ -31,6 +29,11 @@ class NoteFrequency extends CommonEnum
     public static function getMessage ($code)
     {
         return isset(self::$message[$code]) ? self::$message[$code]['name'] : $code;
+    }
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
     }
 
 }

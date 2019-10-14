@@ -70,6 +70,17 @@ class AdminModel extends Crud {
     }
 
     /**
+     * 管理员退出登录
+     * @param $user_id
+     * @return array
+     */
+    public function logout ($user_id, $clienttype = null)
+    {
+        (new UserModel())->logout($user_id, $clienttype);
+        return success('ok');
+    }
+
+    /**
      * 管理员用户登录
      * @param $post
      * @return array
@@ -91,7 +102,7 @@ class AdminModel extends Crud {
         $userModel = new UserModel();
 
         // 获取用户
-        if (!$userInfo = $this->getDb()->table($this->table)->field('id,user_name,full_name,telephone,password')->where($condition)->limit(1)->find()) {
+        if (!$userInfo = $this->getDb()->table($this->table)->field('id,avatar,user_name,full_name,telephone,password')->where($condition)->limit(1)->find()) {
             return error('用户名或密码错误');
         }
 
@@ -103,6 +114,7 @@ class AdminModel extends Crud {
 
         return success([
             'user_id'   => $userInfo['id'],
+            'avatar'    => httpurl($userInfo['avatar']),
             'nickname'  => get_real_val($userInfo['full_name'], $userInfo['user_name'], $userInfo['telephone']),
             'telephone' => $userInfo['telephone']
         ]);
@@ -115,9 +127,10 @@ class AdminModel extends Crud {
      */
     public function getAdminInfo ($adminid)
     {
-        if (!$adminInfo = $this->getDb()->table($this->table)->field('id,store_id,user_name,full_name,telephone,status')->where(['id' => $adminid])->limit(1)->find()) {
+        if (!$adminInfo = $this->getDb()->table($this->table)->field('id,store_id,avatar,user_name,full_name,telephone,status')->where(['id' => $adminid])->limit(1)->find()) {
             return [];
         }
+        $adminInfo['avatar'] = httpurl($adminInfo['avatar']);
         $adminInfo['nickname'] = get_real_val($adminInfo['full_name'], $adminInfo['user_name'], $adminInfo['telephone']);
         return $adminInfo;
     }
@@ -150,6 +163,27 @@ class AdminModel extends Crud {
             'role' => $roles,
             'permission' => array_column($permissions, 'name')
         ];
+    }
+
+    /**
+     * 根据角色获取用户
+     * @return array
+     */
+    public function getUserByRole ($store_id, $role_id)
+    {
+        $userList = $this->getDb()
+            ->table('admin_role_user role inner join admin_user user on user.id = role.user_id')
+            ->field('user.id,user.avatar,user.user_name,user.full_name,user.telephone')
+            ->where(['role.role_id' => $role_id, 'user.store_id' => $store_id, 'user.status' => 1])
+            ->select();
+        if (empty($userList)) {
+            return [];
+        }
+        foreach ($userList as $k => $v) {
+            $userList[$k]['avatar'] = httpurl($v['avatar']);
+            $userList[$k]['nickname'] = get_real_val($v['full_name'], $v['user_name'], $v['telephone']);
+        }
+        return $userList;
     }
 
     /**

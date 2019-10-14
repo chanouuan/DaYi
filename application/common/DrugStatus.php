@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class DrugStatus extends CommonEnum
+class DrugStatus
 {
 
     const NOSALES  = 0;
@@ -19,5 +17,15 @@ class DrugStatus extends CommonEnum
         1 => '未采购',
         2 => '在售'
     ];
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
+    }
 
 }

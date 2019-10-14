@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class OrderSource extends CommonEnum
+class OrderSource
 {
 
     const DOCTOR      = 1;
@@ -19,5 +17,15 @@ class OrderSource extends CommonEnum
         2 => '购药',
         3 => '网上预约'
     ];
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
+    }
 
 }

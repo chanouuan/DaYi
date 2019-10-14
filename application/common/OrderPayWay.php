@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class OrderPayWay extends CommonEnum
+class OrderPayWay
 {
 
     const CASH     = 'cash';
@@ -74,6 +72,16 @@ class OrderPayWay extends CommonEnum
             }
         }
         return $list;
+    }
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
     }
 
 }

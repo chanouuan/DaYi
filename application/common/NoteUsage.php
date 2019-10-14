@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class NoteUsage extends CommonEnum
+class NoteUsage
 {
 
     static $message = [
@@ -125,6 +123,16 @@ class NoteUsage extends CommonEnum
             }
         }
         return $list;
+    }
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
     }
 
 }

@@ -5,9 +5,7 @@
 
 namespace app\common;
 
-use CommonEnum;
-
-class OrderStatus extends CommonEnum
+class OrderStatus
 {
 
     const REFUNDING = -2;
@@ -21,5 +19,15 @@ class OrderStatus extends CommonEnum
         0  => '未收费',
         1  => '已收费'
     ];
+
+    public static function format ($code)
+    {
+        return isset(self::$message[$code]) ? $code : null;
+    }
+
+    public static function getMessage ($code)
+    {
+        return isset(self::$message[$code]) ? self::$message[$code] : $code;
+    }
 
 }

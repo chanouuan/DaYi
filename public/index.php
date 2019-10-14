@@ -5,8 +5,14 @@ date_default_timezone_set('PRC');
 if (isset($_SERVER['PATH_INFO'])) {
     if (strpos($_SERVER['PATH_INFO'], '.')) {
         http_response_code(404);
-        exit('404');
+        exit(0);
     }
+}
+
+header('Access-Control-Allow-Origin: *');
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+	http_response_code(200);
+    exit(0);
 }
 
 define('APPLICATION_PATH', dirname(__DIR__));
