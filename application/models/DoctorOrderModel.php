@@ -109,7 +109,7 @@ class DoctorOrderModel extends Crud {
             return success([]);
         }
         if (!$list = (new PatientModel())->search($post['name'])) {
-            return success([]); 
+            return success([]);
         }
         return success([
             'columns' => [
@@ -120,6 +120,34 @@ class DoctorOrderModel extends Crud {
             ],
             'rows' => $list
         ]);
+    }
+
+    /**
+     * 搜索药品
+     * @return array
+     */
+    public function searchDrug ($post)
+    {
+        $post['store_id'] = intval($post['store_id']);
+        $post['name']     = trim_space($post['name']);
+        if (!$post['store_id'] || !$post['name']) {
+            return success([]);
+        }
+        return success((new DrugModel())->search($post['store_id'], $post['name']));
+    }
+
+    /**
+     * 搜索诊疗项目
+     * @return array
+     */
+    public function searchTreatmentSheet ($post)
+    {
+        $post['store_id'] = intval($post['store_id']);
+        $post['name']     = trim_space($post['name']);
+        if (!$post['store_id'] || !$post['name']) {
+            return success([]);
+        }
+        return success((new TreatmentModel())->search($post['store_id'], $post['name']));
     }
 
     /**

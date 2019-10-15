@@ -96,13 +96,13 @@ class ServerClinic extends ActionPDO {
      * "errorcode":0, // 错误码 0成功 -1失败
      * "message":"", //错误消息
      * "result":{
-     *     "id":1, 
+     *     "id":1,
      *     "avatar":"", //头像
      *     "telephone":"", //手机号
      *     "nickname":"", //昵称
      *     "unread_count":0, //未读消息数
      *     "store_info":{
-     *          "id":1, 
+     *          "id":1,
      *          "name":"", // 诊所
      *          "status":1 // 状态
      *     }
@@ -334,6 +334,38 @@ class ServerClinic extends ActionPDO {
     public function searchPatient ()
     {
         return (new DoctorOrderModel())->searchPatient($_POST);
+    }
+
+    /**
+     * 搜索药品
+     * @param *store_id 门店ID
+     * @param *name 药品名称
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function searchDrug ()
+    {
+        return (new DoctorOrderModel())->searchDrug($_POST);
+    }
+
+    /**
+     * 搜索诊疗项目
+     * @param *store_id 门店ID
+     * @param *name 名称
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function searchTreatmentSheet ()
+    {
+        return (new DoctorOrderModel())->searchTreatmentSheet($_POST);
     }
 
     /**
