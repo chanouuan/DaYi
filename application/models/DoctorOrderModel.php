@@ -133,7 +133,16 @@ class DoctorOrderModel extends Crud {
         if (!$post['store_id'] || !$post['name']) {
             return success([]);
         }
-        return success((new DrugModel())->search($post['store_id'], $post['name']));
+        $list = (new DrugModel())->search($post['store_id'], $post['name']);
+        return success([
+            'columns' => [
+                ['key' => 'name', 'value' => '名称'],
+                ['key' => 'package_spec', 'value' => '规格'],
+                ['key' => 'retail_price', 'value' => '价格'],
+                ['key' => 'reserve', 'value' => '库存']
+            ],
+            'rows' => $list
+        ]);
     }
 
     /**
@@ -147,7 +156,15 @@ class DoctorOrderModel extends Crud {
         if (!$post['store_id'] || !$post['name']) {
             return success([]);
         }
-        return success((new TreatmentModel())->search($post['store_id'], $post['name']));
+        $list = (new TreatmentModel())->search($post['store_id'], $post['name']);
+        return success([
+            'columns' => [
+                ['key' => 'ident', 'value' => '编码'],
+                ['key' => 'name', 'value' => '名称'],
+                ['key' => 'price', 'value' => '单价']
+            ],
+            'rows' => $list
+        ]);
     }
 
     /**

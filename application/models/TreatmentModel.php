@@ -23,7 +23,7 @@ class TreatmentModel extends Crud {
             'status'   => CommonStatus::OK
         ];
         $condition[''] = ['(name like "' . $name . '%" or ident like "' . $name . '%" or py_code like "' . $name . '%" or wb_code like "' . $name . '%")'];
-        if (!$list = $this->select($condition, 'id,name,unit,price', 'id desc', $limit)) {
+        if (!$list = $this->select($condition, 'id,ident,name,unit,price', 'id desc', $limit)) {
             return [];
         }
         foreach ($list as $k => $v) {

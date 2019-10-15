@@ -23,11 +23,12 @@ class DrugModel extends Crud {
             'status'   => ['>', DrugStatus::NOSALES]
         ];
         $condition[''] = ['(name like "' . $name . '%" or py_code like "' . $name . '%" or wb_code like "' . $name . '%")'];
-        if (!$list = $this->select($condition, 'id,drug_type,name,approval_num,package_spec,dispense_unit,retail_price,amount', 'id desc', $limit)) {
+        if (!$list = $this->select($condition, 'id,drug_type,name,package_spec,dispense_unit,retail_price,amount', 'id desc', $limit)) {
             return [];
         }
         foreach ($list as $k => $v) {
             $list[$k]['retail_price'] = round_dollar($v['retail_price']);
+            $list[$k]['reserve'] = $v['amount'] . $v['dispense_unit'];
         }
         return $list;
     }
