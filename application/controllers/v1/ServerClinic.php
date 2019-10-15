@@ -394,4 +394,24 @@ class ServerClinic extends ActionPDO {
         return (new DoctorOrderModel())->getDoctorList($this->_G['user']['user_id']);
     }
 
+    /**
+     * 版本号检查
+     * @param *version 版本号
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":{
+     *     "upgrade_mode":"", //升级方式（1询问2强制3静默）
+     *     "version":"", //版本号
+     *     "note":"", //版本描述
+     *     "url":"", //下载地址
+     *     "mb":"" //安装包大小 (mb)
+     * }}
+     */
+    public function versionCheck ()
+    {
+        return (new DoctorOrderModel())->versionCheck(getgpc('version'));
+    }
+
 }

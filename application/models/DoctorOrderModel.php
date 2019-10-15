@@ -24,6 +24,16 @@ class DoctorOrderModel extends Crud {
 
     /**
      * 获取医生列表
+     * @param $version 版本号
+     * @return array
+     */
+    public function versionCheck ($version)
+    {
+        return (new VersionModel())->check('qt', $version);
+    }
+
+    /**
+     * 获取医生列表
      * @return array
      */
     public function getDoctorList ($user_id)
