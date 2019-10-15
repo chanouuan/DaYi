@@ -4,6 +4,7 @@ namespace app\models;
 
 use app\common\CommonStatus;
 use app\common\DrugStatus;
+use app\common\DrugType;
 use app\common\Gender;
 use app\common\NoteCategory;
 use app\common\NoteFrequency;
@@ -133,7 +134,8 @@ class DoctorOrderModel extends Crud {
         if (!$post['store_id'] || !$post['name']) {
             return success([]);
         }
-        $list = (new DrugModel())->search($post['store_id'], $post['name']);
+        $drugType = $post['drug_type'] == DrugType::WESTERN ? [DrugType::WESTERN, DrugType::NEUTRAL] : DrugType::CHINESE;
+        $list = (new DrugModel())->search($post['store_id'], $drugType, $post['name']);
         return success([
             'columns' => [
                 ['key' => 'name', 'value' => '名称'],

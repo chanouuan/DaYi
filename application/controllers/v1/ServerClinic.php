@@ -339,6 +339,7 @@ class ServerClinic extends ActionPDO {
     /**
      * 搜索药品
      * @param *store_id 门店ID
+     * @param *drug_type 药品类型 1西药 3草药
      * @param *name 药品名称
      * @return array
      * {
