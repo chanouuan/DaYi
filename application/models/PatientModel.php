@@ -15,7 +15,7 @@ class PatientModel extends Crud {
      * @param $limit
      * @return array
      */
-    public function search ($name, $limit = 10) 
+    public function search ($name, $limit = 5) 
     {
         if (!$list = $this->select(['name' => ['like', $name . '%'], 'status' => 1], 'id,name,telephone,birthday,gender', 'id desc', $limit)) {
             return [];

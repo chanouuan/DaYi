@@ -19,7 +19,8 @@ class ServerClinic extends ActionPDO {
             'logout'               => ['interval' => 1000],
             'getUserProfile'       => ['interval' => 1000],
             'doctorCreateCard'     => ['interval' => 1000],
-            'getDoctorOrderList'   => ['interval' => 1000],
+            'getTodayOrderList'    => ['interval' => 200],
+            'getDoctorOrderList'   => ['interval' => 200],
             'getDoctorOrderDetail' => ['interval' => 1000],
             'unionConsultation'    => ['interval' => 1000],
             'saveDoctorCard'       => ['interval' => 1000],
@@ -36,7 +37,9 @@ class ServerClinic extends ActionPDO {
             $this->_G['token'][5] = json_decode($this->_G['token'][5], true);
             $ignoreAccess = [
                 'getUserProfile',
-                'getDoctorList'
+                'getDoctorList',
+                'getDoctorOrderList',
+                'getTodayOrderList'
             ];
             // 权限验证
             if (!in_array($this->_action, $ignoreAccess)) {
@@ -134,7 +137,7 @@ class ServerClinic extends ActionPDO {
      * @param note_side 草药内服或外用（1内服2外用）
      * @param advice 医嘱
      * @param voice 录音地址
-     * @param notes string 处方笺 [{category:处方类别,relation_id:药品ID/诊疗项目ID,single_amount:单量,total_amount:总量,usage:用法,frequency:频率,drug_days:用药天数,remark:备注}]
+     * @param notes string 处方笺 [{category:处方类别,relation_id:药品ID/诊疗项目ID,single_amount:单量,total_amount:总量,usages:用法,frequency:频率,drug_days:用药天数,remark:备注}]
      * @return array
      * {
      * "errorcode":0, //错误码 0成功 -1失败
@@ -150,7 +153,42 @@ class ServerClinic extends ActionPDO {
     }
 
     /**
-     * 获取会诊单列表
+     * 获取会诊列表
+     * @login
+     * @param page 当前页
+     * @param start_time 开始时间
+     * @param end_time 结束时间
+     * @param status 状态
+     * @param doctor_id 医生
+     * @param patient_name 患者
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":{
+     *     "total":1, //总条数
+     *     "list":[{
+     *         "id":1,
+     *         "enum_source":1, //来源
+     *         "doctor_name":1, //医生
+     *         "patient_name":1, //患者姓名
+     *         "patient_gender":1, //患者性别
+     *         "create_time":1, //会诊时间
+     *         "pay":0, //付款
+     *         "discount":0, //优惠
+     *         "payway":"", //支付方式
+     *         "voice":"", //录音
+     *         "status":1, //状态
+     *     }]
+     * }}
+     */
+    public function getDoctorOrderList ()
+    {
+        return (new DoctorOrderModel())->getDoctorOrderList($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 获取今日会诊
      * @login
      * @param page 当前页
      * @param start_time 开始时间
@@ -165,20 +203,18 @@ class ServerClinic extends ActionPDO {
      *         "id":1,
      *         "patient_name":1, //患者姓名
      *         "patient_gender":1, //患者性别
-     *         "patient_age":1, //患者年龄
      *         "create_time":1, //会诊时间
      *         "status":1, //状态
      *     }]
      * }}
      */
-    public function getDoctorOrderList ()
+    public function getTodayOrderList ()
     {
-        return (new DoctorOrderModel())->getDoctorOrderList($this->_G['user']['user_id'], $_POST);
+        return (new DoctorOrderModel())->getTodayOrderList($this->_G['user']['user_id'], $_POST);
     }
 
     /**
      * 查看会诊单详情
-     * @login
      * @param *order_id 订单ID
      * @return array
      * {
@@ -206,7 +242,7 @@ class ServerClinic extends ActionPDO {
      *     "create_time":"", //时间
      *     "notes":[{
      *         "id":"",
-     *         "enum_category":"", //处方类型
+     *         "category":"", //处方类型
      *         "relation_id":"", //药品/诊疗ID
      *         "name":"", //药品/诊疗
      *         "package_spec":"", //规格
@@ -214,8 +250,8 @@ class ServerClinic extends ActionPDO {
      *         "dosage_unit":"", //剂量单位
      *         "single_amount":"", //单量
      *         "total_amount":"", //总量
-     *         "enum_usage":"", //用法
-     *         "enum_frequency":"", //频率
+     *         "usages":"", //用法
+     *         "frequency":"", //频率
      *         "drug_days":"", //天数
      *         "dose":1, //草药剂量
      *         "remark":"" //备注
@@ -257,7 +293,7 @@ class ServerClinic extends ActionPDO {
      * @param note_dose 草药剂量
      * @param note_side 草药内服或外用（1内服2外用）
      * @param advice 医嘱
-     * @param *notes string 处方笺 [{category:处方类别,relation_id:药品ID/诊疗项目ID,single_amount:单量,total_amount:总量,usage:用法,frequency:频率,drug_days:用药天数,remark:备注}]
+     * @param *notes string 处方笺 [{category:处方类别,relation_id:药品ID/诊疗项目ID,single_amount:单量,total_amount:总量,usages:用法,frequency:频率,drug_days:用药天数,remark:备注}]
      * @return array
      * {
      * "errorcode":0, //错误码 0成功 -1失败
@@ -385,7 +421,6 @@ class ServerClinic extends ActionPDO {
 
     /**
      * 获取药品用法
-     * @param category 药品分类
      * @return array
      * {
      * "errorcode":0, //错误码 0成功 -1失败
@@ -395,7 +430,7 @@ class ServerClinic extends ActionPDO {
      */
     public function getUsageEnum ()
     {
-        return (new DoctorOrderModel())->getUsageEnum(getgpc('category'));
+        return (new DoctorOrderModel())->getUsageEnum();
     }
 
     /**
@@ -410,6 +445,20 @@ class ServerClinic extends ActionPDO {
     public function getNoteFrequencyEnum ()
     {
         return (new DoctorOrderModel())->getNoteFrequencyEnum();
+    }
+
+    /**
+     * 获取支付方式
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getLocalPayWay ()
+    {
+        return (new DoctorOrderModel())->getLocalPayWay();
     }
 
     /**
@@ -445,6 +494,22 @@ class ServerClinic extends ActionPDO {
     public function versionCheck ()
     {
         return (new DoctorOrderModel())->versionCheck(getgpc('version'));
+    }
+
+    /**
+     * 打印模板
+     * @param *order_id
+     * @param *type
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function printTemplete ()
+    {
+        return (new DoctorOrderModel())->printTemplete(getgpc('type'), getgpc('order_id'));
     }
 
 }

@@ -55,7 +55,7 @@ class Gender
         if ($month > 0) {
             $str[] = $month . '个月';
         }
-        return $str ? implode('零', $str) : '无';
+        return $str ? implode('', $str) : '无';
     }
 
     /**

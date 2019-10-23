@@ -24,6 +24,46 @@ class DoctorOrderModel extends Crud {
     protected $table = 'dayi_doctor_order';
 
     /**
+     * 打印模板
+     * @param type
+     * @param order_id
+     * @return array
+     */
+    public function printTemplete ($type, $order_id)
+    {
+        $orderInfo = $this->getDoctorOrderDetail($order_id);
+        if ($orderInfo['errorcode'] !== 0) {
+            return $orderInfo;
+        }
+        $orderInfo = $orderInfo['result'];
+
+        if (!$content = $this->parsePrintTemplete($type, $orderInfo)) {
+            return error('模板不存在');
+        }
+
+        return success([
+            'content' => $content
+        ]);
+    }
+
+    /**
+     * 解析打印模板
+     * @return string
+     */
+    protected function parsePrintTemplete ($type, $data)
+    {
+        $filePath = APPLICATION_PATH . '/public/static/print_templete/' . intval($type) . '.html';
+        if (!file_exists($filePath)) {
+            return null;
+        }
+        ob_start();
+        include $filePath;
+        $output = ob_get_contents();
+        ob_end_clean();
+        return $output;
+    }
+
+    /**
      * 获取医生列表
      * @param $version 版本号
      * @return array
@@ -60,25 +100,23 @@ class DoctorOrderModel extends Crud {
 
     /**
      * 获取药品用法
-     * @param category 药品分类
      * @return array
      */
-    public function getUsageEnum ($category)
+    public function getUsageEnum ()
     {
         $list = [];
-        $data = [];
-        if ($category == NoteCategory::WESTERN) {
-            $data = NoteUsage::getWesternUsage();
-        } else if ($category == NoteCategory::CHINESE) {
-            $data = NoteUsage::getChineseUsage();
-        }
-        foreach ($data as $k => $v) {
-            $list[] = [
+        foreach (NoteUsage::getWesternUsage() as $k => $v) {
+            $list[NoteCategory::WESTERN][] = [
                 'id' => $k,
                 'name' => $v
             ];
         }
-        unset($data);
+        foreach (NoteUsage::getChineseUsage() as $k => $v) {
+            $list[NoteCategory::CHINESE][] = [
+                'id' => $k,
+                'name' => $v
+            ];
+        }
         return success($list);
     }
 
@@ -96,6 +134,24 @@ class DoctorOrderModel extends Crud {
                 'daily_count' => $v['daily_count']
             ];
         }
+        return success($list);
+    }
+
+    /**
+     * 获取支付方式
+     * @return array
+     */
+    public function getLocalPayWay ()
+    {
+        $list = [];
+        $data = OrderPayWay::getLocalPayWay();
+        foreach ($data as $k => $v) {
+            $list[] = [
+                'id' => $k,
+                'name' => $v
+            ];
+        }
+        unset($data);
         return success($list);
     }
 
@@ -140,7 +196,7 @@ class DoctorOrderModel extends Crud {
             'columns' => [
                 ['key' => 'name', 'value' => '名称'],
                 ['key' => 'package_spec', 'value' => '规格'],
-                ['key' => 'retail_price', 'value' => '价格'],
+                ['key' => 'price', 'value' => '价格'],
                 ['key' => 'reserve', 'value' => '库存']
             ],
             'rows' => $list
@@ -265,8 +321,10 @@ class DoctorOrderModel extends Crud {
         $post['order_id']      = intval($post['order_id']);
         $post['payway']        = OrderPayWay::isLocalPayWay($post['payway']) ? $post['payway'] : null;
         $post['money']         = max(0, $post['money']);
+        $post['money']         = $post['money'] * 100;
         $post['second_payway'] = OrderPayWay::isLocalPayWay($post['second_payway']) ? $post['second_payway'] : null;
         $post['second_money']  = $post['second_payway'] ? max(0, $post['second_money']) : 0;
+        $post['second_money']  = $post['second_money'] * 100;
         $post['second_payway'] = $post['second_money'] ? $post['second_payway'] : null;
         $post['remark']        = trim_space($post['remark']);
 
@@ -290,22 +348,22 @@ class DoctorOrderModel extends Crud {
         $discount = OrderDiscountType::getDiscountMoney($post['discount_type'], $post['discount_val'], $orderInfo['pay']);
 
         // 验证实付金额是否等于应付金额
-        if ($post['money'] + $post['second_money'] != $orderInfo['pay'] - $discount) {
+        if ($post['money'] + $post['second_money'] != $discount) {
             return error('付款金额验证失败');
         }
 
         // 更新订单已收费
         if (!$this->getDb()->update($this->table, [
-            'pay'            => $orderInfo['pay'] - $discount,
-            'discount'       => $discount,
+            'pay'            => $discount,
+            'discount'       => $orderInfo['pay'] - $discount,
             'charge_user_id' => $user_id,
             'print_code'     => null,
             'payway'         => $post['second_payway'] ? OrderPayWay::MULTIPAY : $post['payway'],
             'status'         => OrderStatus::PAY,
             'update_time'    => date('Y-m-d H:i:s', TIMESTAMP)
         ], [
-            'id'          => $post['order_id'],
-            'status'      => OrderStatus::NOPAY
+            'id'     => $post['order_id'],
+            'status' => OrderStatus::NOPAY
         ])) {
             return error('保存订单失败');
         }
@@ -359,7 +417,16 @@ class DoctorOrderModel extends Crud {
         $orderInfo['doctor_name'] = $doctorInfo['nickname'];
 
         // 获取处方笺
-        $orderInfo['notes'] = $this->getDb()->table('dayi_doctor_order_notes')->where(['order_id' => $order_id])->field('id,category,relation_id,name,package_spec,dispense_unit,dosage_unit,single_amount,total_amount,usage,frequency,drug_days,dose,remark')->order('id')->select();
+        $orderInfo['notes'] = $this->getDb()->table('dayi_doctor_order_notes')->where(['order_id' => $order_id])->field('id,category,relation_id,name,package_spec,dispense_unit,dosage_unit,single_amount,total_amount,usages,frequency,drug_days,dose,remark')->order('id')->select();
+
+        foreach ($orderInfo['notes'] as $k => $v) {
+            if (NoteCategory::isDrug($v['category'])) {
+                $orderInfo['notes'][$k]['usages_name'] = NoteUsage::getMessage($v['usages']);
+                if ($v['category'] == NoteCategory::WESTERN) {
+                    $orderInfo['notes'][$k]['frequency_name'] = NoteFrequency::getMessage($v['frequency']);
+                }
+            }
+        }
 
         return success($orderInfo);
     }
@@ -370,9 +437,76 @@ class DoctorOrderModel extends Crud {
      */
     public function getDoctorOrderList ($user_id, array $post)
     {
+        $post['page_size'] = max(6, $post['page_size']);
+
+        // 条件查询
+        $condition = [];
+
+        // 用户获取
+        $userInfo = $this->getUserInfo($user_id);
+        if ($userInfo['errorcode'] !== 0) {
+            return $userInfo;
+        }
+        $userInfo = $userInfo['result'];
+        $condition['store_id'] = $userInfo['store_id'];
+
         // 搜索时间
         $post['start_time'] = strtotime($post['start_time']);
         $post['end_time']   = strtotime($post['end_time']);
+
+        if ($post['start_time'] && $post['end_time'] && $post['start_time'] <= $post['end_time']) {
+            $condition['create_time'] = ['between', [date('Y-m-d H:i:s', $post['start_time']), date('Y-m-d H:i:s', $post['end_time'])]];
+        }
+
+        // 搜索状态
+        if (!is_null(OrderStatus::format($post['status']))) {
+            $condition['status'] = $post['status'];
+        }
+
+        // 搜索医生
+        if ($post['doctor_id']) {
+            $condition['doctor_id'] = intval($post['doctor_id']);
+        }
+
+        // 搜索患者
+        if ($post['patient_name']) {
+            $condition['patient_name'] = ['like', '%' . $post['patient_name'] . '%'];
+        }
+
+        $count = $this->getDb()->table($this->table)->where($condition)->count();
+        if ($count > 0) {
+            $pagesize = getPageParams($post['page'], $count, $post['page_size']);
+            $list = $this->select($condition, 'id,enum_source,doctor_id,patient_name,patient_gender,patient_age,patient_tel,voice,pay,discount,payway,create_time,status', 'id desc', $pagesize['limitstr']);
+            $userNames = (new AdminModel())->getAdminNames(array_column($list, 'doctor_id'));
+            foreach ($list as $k => $v) {
+                $list[$k]['source']      = OrderSource::getMessage($v['enum_source']);
+                $list[$k]['patient_age'] = Gender::showAge($v['patient_age']);
+                $list[$k]['payway']      = OrderPayWay::getMessage($v['payway']);
+                $list[$k]['doctor_name'] = $v['doctor_id'] ? $userNames[$v['doctor_id']] : '无';
+            }
+            unset($userNames);
+        }
+
+        return success([
+            'total_count' => $count,
+            'page_size' => $post['page_size'],
+            'list' => $list ? $list : []
+        ]);
+    }
+
+    /**
+     * 获取今日会诊
+     * @return array
+     */
+    public function getTodayOrderList ($user_id, array $post)
+    {
+        // 搜索时间
+        $post['start_time'] = strtotime($post['start_time']);
+        $post['end_time']   = strtotime($post['end_time']);
+
+        if ($post['start_time'] && !$post['end_time']) {
+            $post['end_time'] = $post['start_time'] + 86399;
+        }
 
         if ($post['start_time'] > $post['end_time']) {
             return error('开始时间不能大于截止时间');
@@ -386,16 +520,9 @@ class DoctorOrderModel extends Crud {
         $post['start_time'] = date('Y-m-d H:i:s', $post['start_time']);
         $post['end_time']   = date('Y-m-d H:i:s', $post['end_time']);
 
-        // 用户获取
-        $userInfo = $this->getUserInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
         // 条件查询
         $condition = [
-            'store_id'    => $userInfo['store_id'],
+            'doctor_id'   => $user_id,
             'enum_source' => OrderSource::DOCTOR,
             'create_time' => ['between', [$post['start_time'], $post['end_time']]]
         ];
@@ -405,17 +532,16 @@ class DoctorOrderModel extends Crud {
 
         $count = $this->getDb()->table($this->table)->where($condition)->count();
         if ($count > 0) {
-            $pagesize = getPageParams($post['page'], $count, max(20, $post['pagesize']));
-            $list = $this->select($condition, 'id,patient_name,patient_gender,patient_age,create_time,status', 'id desc', $pagesize['limitstr']);
+            $pagesize = getPageParams($post['page'], $count, 5);
+            $list = $this->select($condition, 'id,patient_name,patient_gender,create_time,status', 'id desc', $pagesize['limitstr']);
             foreach ($list as $k => $v) {
-                $list[$k]['patient_gender'] = Gender::getMessage($v['patient_gender']);
-                $list[$k]['patient_age']    = Gender::showAge($v['patient_age']);
-                $list[$k]['status']         = OrderStatus::getMessage($v['status']);
+                $list[$k]['create_time'] = substr($v['create_time'], 0, 16);
             }
         }
 
         return success([
-            'total' => $count,
+            'total_count' => $count,
+            'page_size' => 5,
             'list' => $list ? $list : []
         ]);
     }
@@ -625,7 +751,7 @@ class DoctorOrderModel extends Crud {
         $post['advice']            = trim_space($post['advice']);
         $post['advice']            = $post['advice'] ? $post['advice'] : null;
         $post['voice']             = ishttp($post['voice']) ? $post['voice'] : null;
-        $post['notes']             = $post['notes'] ? array_slice(json_decode($post['notes'], true), 0, 20) : [];
+        $post['notes']             = $post['notes'] ? array_slice(json_decode(htmlspecialchars_decode($post['notes']), true), 0, 20) : [];
 
         if ($post['patient_tel'] && !validate_telephone($post['patient_tel'])) {
             return error('患者手机号填写不正确');
@@ -661,7 +787,7 @@ class DoctorOrderModel extends Crud {
 
         // 处方笺
         if (!$post['notes'] = $this->arrangeNotes($post['notes'], $post['note_dose'])) {
-            return error('处方笺填写格式不正确');
+            return error('药品库存不足');
         }
 
         // 计算总金额
@@ -681,7 +807,7 @@ class DoctorOrderModel extends Crud {
     {
         $code = (rand() % 10) . (rand() % 10) . (rand() % 10) . (rand() % 10);
         // 检查重复
-        if ($this->getDb()->table($this->table)->wherer(['store_id' => $store_id, 'print_code' => intval($code), 'status' => OrderStatus::NOPAY])->count()) {
+        if ($this->getDb()->table($this->table)->where(['store_id' => $store_id, 'print_code' => intval($code), 'status' => OrderStatus::NOPAY])->count()) {
             return $this->buildPrintCode($store_id);
         }
         return $code;
@@ -742,7 +868,7 @@ class DoctorOrderModel extends Crud {
             $notes[$k]['relation_id']   = intval($v['relation_id']);
             $notes[$k]['total_amount']  = max(0, intval($v['total_amount']));
             $notes[$k]['single_amount'] = max(0, intval($v['single_amount']));
-            $notes[$k]['usage']         = NoteUsage::format($v['usage']);
+            $notes[$k]['usages']        = NoteUsage::format($v['usages']);
             $notes[$k]['frequency']     = NoteFrequency::format($v['frequency']);
             $notes[$k]['drug_days']     = max(0, intval($v['drug_days']));
             if (!$notes[$k]['relation_id'] || !$notes[$k]['total_amount'] || !NoteCategory::format($v['category'])) {
@@ -758,7 +884,7 @@ class DoctorOrderModel extends Crud {
                 if ($v['category'] == NoteCategory::CHINESE) {
                     // 草药剂量
                     $lookChineseDrug = true;
-                    $dose = region_number($dose, 0, 1, 1000, 1000);
+                    $dose = region_number($dose, 1, 1, 1000, 1000);
                     $list[1][$v['relation_id']] += ($v['total_amount'] * $dose);
                 } else {
                     $list[1][$v['relation_id']] += $v['total_amount'];
@@ -804,7 +930,7 @@ class DoctorOrderModel extends Crud {
                     'dosage_unit'   => $list[1][$v['relation_id']]['dosage_unit'],
                     'single_amount' => $v['single_amount'],
                     'total_amount'  => $v['total_amount'],
-                    'usage'         => $v['usage'],
+                    'usages'        => $v['usages'],
                     'frequency'     => $v['frequency'],
                     'drug_days'     => $v['drug_days'],
                     'price'         => $v['total_amount'] * $list[1][$v['relation_id']]['retail_price'],
@@ -823,7 +949,7 @@ class DoctorOrderModel extends Crud {
                     'dosage_unit'   => null,
                     'single_amount' => null,
                     'total_amount'  => $v['total_amount'],
-                    'usage'         => null,
+                    'usages'        => null,
                     'frequency'     => null,
                     'drug_days'     => null,
                     'price'         => $v['total_amount'] * $list[2][$v['relation_id']]['price'],

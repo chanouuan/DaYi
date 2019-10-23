@@ -21,17 +21,17 @@ class OrderDiscountType
      * 获取优惠后的金额
      * @param $code 优惠类型
      * @param $disval 优惠变量值
-     * @parm $money 原价
+     * @param $money 原价
      * @return int
      */
     public static function getDiscountMoney ($code, $disval, $money)
     {
         switch ($code) {
             case self::RATIO:
-                $money = bcmul($money, bcdiv(region_number(intval($disval), 0, 0, 100, 100), 100));
+                $money = bcmul($money, bcdiv(region_number(intval($disval), 0, 0, 100, 100), 100, 2));
                 break;
             case self::CASH:
-                $money = bcsub($money, region_number(intval($disval), 0, 0, $money, $money));
+                $money = bcsub($money, region_number(intval($disval * 100), 0, 0, $money, $money));
                 break;
         }
         return intval($money);

@@ -38,7 +38,7 @@ class OrderPayWay
     public static function isLocalPayWay ($code)
     {
         return in_array($code, [
-            self::CASH, self::UNIONPAY, self::YIBAO, self::WEIXIN, self::ALIPAY, self::MULTIPAY
+            self::CASH, self::UNIONPAY, self::YIBAO, self::WEIXIN, self::ALIPAY
         ]);
     }
 

@@ -125,14 +125,34 @@ class AdminModel extends Crud {
      * @param $adminid
      * @return array
      */
-    public function getAdminInfo ($adminid)
+    public function getAdminInfo ($id)
     {
-        if (!$adminInfo = $this->getDb()->table($this->table)->field('id,store_id,avatar,user_name,full_name,telephone,status')->where(['id' => $adminid])->limit(1)->find()) {
+        if (!$adminInfo = $this->getDb()->table($this->table)->field('id,store_id,avatar,user_name,full_name,telephone,status')->where(['id' => $id])->limit(1)->find()) {
             return [];
         }
         $adminInfo['avatar'] = httpurl($adminInfo['avatar']);
         $adminInfo['nickname'] = get_real_val($adminInfo['full_name'], $adminInfo['user_name'], $adminInfo['telephone']);
         return $adminInfo;
+    }
+
+    /**
+     * 获取用户姓名
+     * @param $id
+     * @return array
+     */
+    public function getAdminNames (array $id)
+    {
+        $id = array_filter(array_unique($id));
+        if (!$id) {
+            return [];
+        }
+        if (!$admins = $this->getDb()->table($this->table)->field('id,user_name,full_name,telephone')->where(['id' => ['in', $id]])->select()) {
+            return [];
+        }
+        foreach ($admins as $k => $v) {
+            $admins[$k]['nickname'] = get_real_val($v['full_name'], $v['user_name'], $v['telephone']);
+        }
+        return array_column($admins, 'nickname', 'id');
     }
 
     /**
