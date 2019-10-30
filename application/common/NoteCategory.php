@@ -11,11 +11,13 @@ class NoteCategory
     const WESTERN   = 1;
     const CHINESE   = 2;
     const TREATMENT = 3;
+    const MATERIAL  = 4;
 
     static $message = [
         1 => '西药方',
         2 => '草药方',
-        3 => '诊疗单'
+        3 => '诊疗单',
+        4 => '材料'
     ];
 
     /**

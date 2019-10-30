@@ -127,6 +127,9 @@ class AdminModel extends Crud {
      */
     public function getAdminInfo ($id)
     {
+        if (!$id) {
+            return [];
+        }
         if (!$adminInfo = $this->getDb()->table($this->table)->field('id,store_id,avatar,user_name,full_name,telephone,status')->where(['id' => $id])->limit(1)->find()) {
             return [];
         }

@@ -21,12 +21,14 @@ class ServerClinic extends ActionPDO {
             'doctorCreateCard'     => ['interval' => 1000],
             'getTodayOrderList'    => ['interval' => 200],
             'getDoctorOrderList'   => ['interval' => 200],
+            'getDrugList'          => ['interval' => 200],
             'getDoctorOrderDetail' => ['interval' => 1000],
             'unionConsultation'    => ['interval' => 1000],
             'saveDoctorCard'       => ['interval' => 1000],
             'buyDrug'              => ['interval' => 1000],
             'localCharge'          => ['interval' => 1000],
-            'getMessageCount'      => ['interval' => 1000]
+            'getMessageCount'      => ['interval' => 1000],
+            'addDrug'              => ['interval' => 1000]
         ];
     }
 
@@ -39,7 +41,8 @@ class ServerClinic extends ActionPDO {
                 'getUserProfile',
                 'getDoctorList',
                 'getDoctorOrderList',
-                'getTodayOrderList'
+                'getTodayOrderList',
+                'getDrugList'
             ];
             // 权限验证
             if (!in_array($this->_action, $ignoreAccess)) {
@@ -375,7 +378,7 @@ class ServerClinic extends ActionPDO {
     /**
      * 搜索药品
      * @param *store_id 门店ID
-     * @param *drug_type 药品类型 1西药 3草药
+     * @param *drug_type 药品类型
      * @param *name 药品名称
      * @return array
      * {
@@ -387,6 +390,22 @@ class ServerClinic extends ActionPDO {
     public function searchDrug ()
     {
         return (new DoctorOrderModel())->searchDrug($_POST);
+    }
+
+    /**
+     * 药品查询
+     * @param *drug_type 药品类型
+     * @param *name 国药准字/药品名称/拼音码/五笔码/条形码
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function searchDrugDict ()
+    {
+        return (new DoctorOrderModel())->searchDrugDict($_POST);
     }
 
     /**
@@ -448,6 +467,34 @@ class ServerClinic extends ActionPDO {
     }
 
     /**
+     * 获取药品剂型
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getDosageEnum ()
+    {
+        return (new DoctorOrderModel())->getDosageEnum();
+    }
+
+    /**
+     * 获取药品单位
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getUnitEnum ()
+    {
+        return (new DoctorOrderModel())->getUnitEnum();
+    }
+
+    /**
      * 获取支付方式
      * @return array
      * {
@@ -498,8 +545,8 @@ class ServerClinic extends ActionPDO {
 
     /**
      * 打印模板
-     * @param *order_id
-     * @param *type
+     * @param *order_id 订单ID
+     * @param *type 类型
      * @return array
      * {
      * "errorcode":0, //错误码 0成功 -1失败
@@ -510,6 +557,59 @@ class ServerClinic extends ActionPDO {
     public function printTemplete ()
     {
         return (new DoctorOrderModel())->printTemplete(getgpc('type'), getgpc('order_id'));
+    }
+
+    /**
+     * 录音回调
+     * @param *order_id 订单ID
+     * @param *url 地址
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function notifyVoice ()
+    {
+        return (new DoctorOrderModel())->notifyVoice(getgpc('order_id'), getgpc('url'));
+    }
+
+    /**
+     * 获取药品列表
+     * @login
+     * @param page 当前页
+     * @param name 名称
+     * @param status 状态
+     * @param drug_type 类型
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":{
+     *     "total":1, //总条数
+     *     "list":[]
+     * }}
+     */
+    public function getDrugList ()
+    {
+        return (new DoctorOrderModel())->getDrugList($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 添加药品
+     * @login
+     * @param drug_type 药品类型
+     * @return array
+     * {
+     * "errorcode":0, //错误码 0成功 -1失败
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function addDrug ()
+    {
+        return (new DoctorOrderModel())->addDrug($this->_G['user']['user_id'], $_POST);
     }
 
 }

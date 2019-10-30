@@ -11,6 +11,28 @@ class PayFlowModel extends Crud {
     protected $table = 'dayi_pay_flow';
 
     /**
+     * 获取订单流水
+     * @param $flow_type 操作类型
+     * @param $order_id 订单id
+     * @return array
+     */
+    public function getOrders ($flow_type, $order_id)
+    {
+        $condition = [
+            'order_id' => $order_id
+        ];
+        if (OrderPayFlow::format($flow_type)) {
+            $condition['flow_type'] = $flow_type;
+        }
+        $list = $this->select($condition, 'id,flow_type,money,payway,remark');
+        foreach ($list as $k => $v) {
+            $list[$k]['money']  = round_dollar($v['money']);
+            $list[$k]['payway'] = OrderPayWay::getMessage($v['payway']);
+        }
+        return $list;
+    }
+
+    /**
      * 添加资金流水
      * @param $flow_type 操作类型
      * @param $order_id 订单id
@@ -42,7 +64,7 @@ class PayFlowModel extends Crud {
                 'flow_type'   => [$flow_type, $flow_type],
                 'payway'      => [$payway, $second_payway],
                 'money'       => [$money, $second_money],
-                'remark'      => [$remark, $remark],
+                'remark'      => [$remark, null],
                 'create_time' => [date('Y-m-d H:i:s', TIMESTAMP), date('Y-m-d H:i:s', TIMESTAMP)]
             ];
         }

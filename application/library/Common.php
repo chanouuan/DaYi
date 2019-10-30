@@ -224,7 +224,7 @@ function pass_string ($str)
 function trim_space ($string)
 {
     return $string ? str_replace(array(
-            '　', ' '
+            '　', ' ', "\r", "\n", "\t"
     ), '', trim($string)) : $string;
 }
 
@@ -383,6 +383,28 @@ function get_ip ()
     return ($long != -1 && $long !== FALSE) ? $ip : '';
 }
 
+function authcode ($string, $operation = 'DECODE', $key = null)
+{
+    $key = $key ? $key : '######';
+    if ($operation == 'DECODE') {
+        $string = base64_decode($string);
+        $slen = strlen($string);
+        $klen = strlen($key);
+        $plain = '';
+        for ($i = 0; $i < $slen; $i = $i + $klen) {
+            $plain .= $key ^ substr($string, $i, $klen);
+        }
+        return $plain;
+    }
+    $slen = strlen($string);
+    $klen = strlen($key);
+    $cipher = '';
+    for ($i = 0; $i < $slen; $i = $i + $klen) {
+        $cipher .= substr($string, $i, $klen) ^ $key;
+    }
+    return base64_encode($cipher);
+}
+
 /**
  *
  * @param $string 明文 或 密文
@@ -391,7 +413,7 @@ function get_ip ()
  * @param $expiry 密文有效期
  * @return string
  */
-function authcode ($string, $operation = 'DECODE', $key = '', $expiry = 0)
+function dy_authcode ($string, $operation = 'DECODE', $key = '', $expiry = 0)
 {
     // 动态密匙长度，相同的明文会生成不同密文就是依靠动态密匙
     $ckey_length = 4;

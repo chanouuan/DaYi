@@ -93,8 +93,7 @@ class NoteUsage
 
     /**
      * 获取西药方用法
-     * @param $code
-     * @return bool
+     * @return array
      */
     public static function getWesternUsage ()
     {
@@ -111,8 +110,7 @@ class NoteUsage
 
     /**
      * 获取草药方用法
-     * @param $code
-     * @return bool
+     * @return array
      */
     public static function getChineseUsage ()
     {
