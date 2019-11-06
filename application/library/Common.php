@@ -221,11 +221,11 @@ function pass_string ($str)
     return !empty($str) ? preg_replace('/^(.+)(.{4})?(.{4})?$/Us', '\\1****\\3', $str) : $str;
 }
 
-function trim_space ($string)
+function trim_space ($string, $default = null)
 {
-    return $string ? str_replace(array(
+    return $string ? str_replace([
             '　', ' ', "\r", "\n", "\t"
-    ), '', trim($string)) : $string;
+    ], '', trim($string)) : $default;
 }
 
 function ishttp ($url)
@@ -697,12 +697,15 @@ function success ($data, $message = '', $errorcode = 0)
     if (empty($message)) {
         $message = !is_array($data) ? $data : $message;
     }
-    return [
-            'errorcode' => $errorcode,
-            'errNo' => $errorcode,
-            'message' => $message,
-            'result' => is_array($data) ? $data : []
+    $result = [
+        'errorcode' => $errorcode,
+        'message'   => $message,
+        'result'    => is_array($data) ? $data : []
     ];
+    if (isset($_POST['statuscode'])) {
+        $result['statuscode'] = $_POST['statuscode'];
+    }
+    return $result;
 }
 
 function error ($data, $message = '', $errorcode = -1)
@@ -710,12 +713,15 @@ function error ($data, $message = '', $errorcode = -1)
     if (empty($message)) {
         $message = !is_array($data) ? $data : $message;
     }
-    return [
-            'errorcode' => $errorcode,
-            'errNo' => $errorcode,
-            'message' => $message,
-            'result' =>  is_array($data) ? $data : []
+    $result = [
+        'errorcode' => $errorcode,
+        'message'   => $message,
+        'result'    =>  is_array($data) ? $data : []
     ];
+    if (isset($_POST['statuscode'])) {
+        $result['statuscode'] = $_POST['statuscode'];
+    }
+    return $result;
 }
 
 function json ($data, $message = '', $errorcode = 0, $httpcode = 200) {
@@ -735,12 +741,6 @@ function json_unicode_encode ($data, $default = '')
 {
     // JSON_FORCE_OBJECT | JSON_UNESCAPED_UNICODE
     return empty($data) ? $default : json_encode($data, JSON_UNESCAPED_UNICODE);
-}
-
-function pheader ($location)
-{
-    header('Location: ' . $location);
-    exit(0);
 }
 
 function json_mysql_encode ($data)
@@ -1000,7 +1000,7 @@ function check_car_license($license)
  * @param array $data
  * @return string
  */
-function setSign(& $data = [])
+function setSign(array $data)
 {
     if (!isset($data['time'])) {
         $data['time'] = MICROTIME;
@@ -1029,7 +1029,7 @@ function setSign(& $data = [])
  * @param $data
  * @return boolen
  */
-function checkSignPass($data)
+function checkSignPass(array $data)
 {
     // 参数校验
     if (empty($data)) {
@@ -1038,10 +1038,10 @@ function checkSignPass($data)
 
     // 验签
     $sig = $data['sig'];
-    if (empty($sig)) {
+    if (empty($sig) || empty($data['time']) || empty($data['nonce_str'])) {
         return error(null, \StatusCodes::getMessage(\StatusCodes::SIG_ERROR), \StatusCodes::SIG_ERROR);
     }
-    setSign($data);
+    $data = setSign($data);
     if ($sig != $data['sig']) {
         return error(null, \StatusCodes::getMessage(\StatusCodes::SIG_ERROR), \StatusCodes::SIG_ERROR);
     }
@@ -1133,4 +1133,13 @@ function get_list_dir ($root, $paths = [])
         }
     }
     return $paths;
+}
+
+function array_curd (array $exists, array $posts)
+{
+    return [
+        'add' => array_diff($posts, $exists),
+        'delete' => array_diff($exists, $posts),
+        'update' => array_intersect($exists, $posts)
+    ];
 }

@@ -12,8 +12,8 @@ class CommonStatus
     const OK  = 1;
 
     static $message = [
-        0 => '未启用',
-        1 => '已启用'
+        0 => '停用',
+        1 => '启用'
     ];
 
     public static function format ($code)

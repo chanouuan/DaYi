@@ -263,7 +263,7 @@ class DrugDosage
 
     /**
      * 获取中成药剂量
-     * @return bool
+     * @return array
      */
     public static function getNeutral ()
     {

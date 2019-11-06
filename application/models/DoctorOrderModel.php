@@ -3,43 +3,22 @@
 namespace app\models;
 
 use app\common\CommonStatus;
-use app\common\DrugType;
 use app\common\Gender;
 use app\common\NoteCategory;
 use app\common\NoteFrequency;
 use app\common\NoteSide;
 use app\common\NoteUsage;
 use app\common\DrugDosage;
-use app\common\DrugUnit;
-use app\common\OrderDiscountType;
+use app\common\Royalty;
 use app\common\OrderPayFlow;
 use app\common\OrderPayWay;
 use app\common\OrderSource;
 use app\common\OrderStatus;
-use app\common\NoteAllergy;
-use app\common\Role;
 use Crud;
 
 class DoctorOrderModel extends Crud {
 
     protected $table = 'dayi_doctor_order';
-
-    /**
-     * 添加药品
-     * @return array
-     */
-    public function addDrug ($user_id, $post)
-    {
-        // 获取用户信息
-        $userInfo = $this->getUserInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-        $post['store_id'] = $userInfo['store_id'];
-
-        return (new DrugModel())->saveDrug($post);
-    }
 
     /**
      * 录音回调
@@ -102,264 +81,13 @@ class DoctorOrderModel extends Crud {
     }
 
     /**
-     * 获取医生列表
-     * @param $version 版本号
-     * @return array
-     */
-    public function versionCheck ($version)
-    {
-        return (new VersionModel())->check('qt', $version);
-    }
-
-    /**
-     * 获取医生列表
-     * @return array
-     */
-    public function getDoctorList ($user_id)
-    {
-        // 获取用户信息
-        $userInfo = $this->getUserInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-        // 获取医生
-        return success((new AdminModel())->getUserByRole($userInfo['store_id'], Role::DOCTOR));
-    }
-
-    /**
-     * 获取过敏史
-     * @return array
-     */
-    public function getAllergyEnum ()
-    {
-        return success(array_values(NoteAllergy::$message));
-    }
-
-    /**
-     * 获取药品剂型
-     * @return array
-     */
-    public function getDosageEnum ()
-    {
-        $list = [];
-        foreach (DrugDosage::getNeutral() as $k => $v) {
-            $list[DrugType::NEUTRAL][] = [
-                'id' => $k,
-                'name' => $v
-            ];
-        }
-        foreach (DrugDosage::getWestern() as $k => $v) {
-            $list[DrugType::WESTERN][] = [
-                'id' => $k,
-                'name' => $v
-            ];
-        }
-        return success($list);
-    }
-
-    /**
-     * 获取药品单位
-     * @return array
-     */
-    public function getUnitEnum ()
-    {
-        return success(array_values(DrugUnit::$message));
-    }
-
-    /**
-     * 获取药品用法
-     * @return array
-     */
-    public function getUsageEnum ()
-    {
-        $list = [];
-        foreach (NoteUsage::getWesternUsage() as $k => $v) {
-            $list[NoteCategory::WESTERN][] = [
-                'id' => $k,
-                'name' => $v
-            ];
-        }
-        foreach (NoteUsage::getChineseUsage() as $k => $v) {
-            $list[NoteCategory::CHINESE][] = [
-                'id' => $k,
-                'name' => $v
-            ];
-        }
-        return success($list);
-    }
-
-    /**
-     * 获取药品频率
-     * @return array
-     */
-    public function getNoteFrequencyEnum ()
-    {
-        $list = [];
-        foreach (NoteFrequency::$message as $k => $v) {
-            $list[] = [
-                'id' => $k,
-                'name' => $v['name'],
-                'daily_count' => $v['daily_count']
-            ];
-        }
-        return success($list);
-    }
-
-    /**
-     * 获取支付方式
-     * @return array
-     */
-    public function getLocalPayWay ()
-    {
-        $list = [];
-        $data = OrderPayWay::getLocalPayWay();
-        foreach ($data as $k => $v) {
-            $list[] = [
-                'id' => $k,
-                'name' => $v
-            ];
-        }
-        unset($data);
-        return success($list);
-    }
-
-    /**
-     * 搜索患者
-     * @return array
-     */
-    public function searchPatient ($post)
-    {
-        $post['name'] = trim_space($post['name']);
-        if (!$post['name'] || preg_match('/^\d+$/', $post['name'])) {
-            return success([]);
-        }
-        if (!$list = (new PatientModel())->search($post['name'])) {
-            return success([]);
-        }
-        return success([
-            'columns' => [
-                ['key' => 'name', 'value' => '姓名'],
-                ['key' => 'sex', 'value' => '性别'],
-                ['key' => 'age', 'value' => '年龄'],
-                ['key' => 'telephone', 'value' => '手机']
-            ],
-            'rows' => $list
-        ]);
-    }
-
-    /**
-     * 搜索药品
-     * @return array
-     */
-    public function searchDrug ($post)
-    {
-        $post['store_id'] = intval($post['store_id']);
-        $post['name']     = trim_space($post['name']);
-        if (!$post['store_id'] || !$post['name']) {
-            return success([]);
-        }
-        $drugType = $post['drug_type'] == DrugType::WESTERN ? [DrugType::WESTERN, DrugType::NEUTRAL] : intval($post['drug_type']);
-        if (!$list = (new DrugModel())->search($post['store_id'], $drugType, $post['name'])) {
-            return success([]);
-        }
-        return success([
-            'columns' => [
-                ['key' => 'name', 'value' => '名称'],
-                ['key' => 'package_spec', 'value' => '规格'],
-                ['key' => 'price', 'value' => '价格'],
-                ['key' => 'reserve', 'value' => '库存']
-            ],
-            'rows' => $list
-        ]);
-    }
-
-    /**
-     * 药品查询
-     * @return array
-     */
-    public function searchDrugDict ($post)
-    {
-        $post['name'] = trim_space($post['name']);
-        if (!$post['name']) {
-            return success([]);
-        }
-        $drugType = $post['drug_type'] == DrugType::WESTERN ? ['西药', '中成药'] : '草药';
-        if (!$list = (new DrugModel())->searchDict($drugType, $post['name'])) {
-            return success([]);
-        }
-        $columns = [
-            ['key' => 'approval_num', 'value' => '国药准字'],
-            ['key' => 'name', 'value' => '名称'],
-            ['key' => 'package_spec', 'value' => '规格'],
-            ['key' => 'barcode', 'value' => '条形码']
-        ];
-        if ($drugType == '草药') {
-            $columns = [
-                ['key' => 'name', 'value' => '名称'],
-                ['key' => 'package_spec', 'value' => '规格'],
-                ['key' => 'dispense_unit', 'value' => '单位'],
-                ['key' => 'retail_price', 'value' => '售价']
-            ];
-        }
-        return success([
-            'columns' => $columns,
-            'rows'    => $list
-        ]);
-    }
-
-    /**
-     * 搜索诊疗项目
-     * @return array
-     */
-    public function searchTreatmentSheet ($post)
-    {
-        $post['store_id'] = intval($post['store_id']);
-        $post['name']     = trim_space($post['name']);
-        if (!$post['store_id'] || !$post['name']) {
-            return success([]);
-        }
-        $list = (new TreatmentModel())->search($post['store_id'], $post['name']);
-        return success([
-            'columns' => [
-                ['key' => 'ident', 'value' => '编码'],
-                ['key' => 'name', 'value' => '名称'],
-                ['key' => 'price', 'value' => '单价']
-            ],
-            'rows' => $list
-        ]);
-    }
-
-    /**
-     * 获取登录账号信息
-     * @return array
-     */
-    public function getUserProfile ($user_id)
-    {
-        // 用户获取
-        $userInfo = $this->getUserInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
-        // 获取诊所信息
-        $userInfo['store_info'] = (new StoreModel())->find(['id' => $userInfo['store_id']], 'id,name,status');
-
-        // 消息
-        $userInfo['unread_count'] = rand(1, 10); // 未读消息数
-
-        return success($userInfo);
-    }
-
-    /**
      * 购药
      * @return array
      */
     public function buyDrug ($user_id, $post)
     {
         // 用户获取
-        $userInfo = $this->getUserInfo($user_id);
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
         if ($userInfo['errorcode'] !== 0) {
             return $userInfo;
         }
@@ -378,8 +106,8 @@ class DoctorOrderModel extends Crud {
         if (!$orderId = $this->getDb()->transaction(function ($db) use($post, $userInfo) {
             // 新增订单
             if (!$orderId = $db->insert($this->table, [
-                'store_id'          => $userInfo['store_id'],
-                'enum_source'       => OrderSource::BUG_DRUG,
+                'clinic_id'         => $userInfo['clinic_id'],
+                'enum_source'       => OrderSource::BUY_DRUG,
                 'patient_id'        => $post['patient_id'],
                 'patient_name'      => $post['patient_name'],
                 'patient_tel'       => $post['patient_tel'],
@@ -437,19 +165,19 @@ class DoctorOrderModel extends Crud {
         }
 
         // 用户获取
-        $userInfo = $this->getUserInfo($user_id);
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
         if ($userInfo['errorcode'] !== 0) {
             return $userInfo;
         }
         $userInfo = $userInfo['result'];
 
         // 获取订单总金额
-        if (!$orderInfo = $this->find(['id' => $post['order_id'], 'store_id' => $userInfo['store_id'], 'status' => OrderStatus::NOPAY], 'pay')) {
+        if (!$orderInfo = $this->find(['id' => $post['order_id'], 'clinic_id' => $userInfo['clinic_id'], 'status' => OrderStatus::NOPAY], 'pay')) {
             return error('本次会诊已结束');
         }
 
         // 计算优惠金额
-        $discount = OrderDiscountType::getDiscountMoney($post['discount_type'], $post['discount_val'], $orderInfo['pay']);
+        $discount = Royalty::getDiscountMoney($post['discount_type'], $post['discount_val'], $orderInfo['pay']);
 
         // 验证实付金额是否等于应付金额
         if ($post['money'] + $post['second_money'] != $discount) {
@@ -491,13 +219,13 @@ class DoctorOrderModel extends Crud {
         }
 
         // 用户获取
-        $userInfo = $this->getUserInfo($user_id);
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
         if ($userInfo['errorcode'] !== 0) {
             return $userInfo;
         }
         $userInfo = $userInfo['result'];
 
-        if (!$orderInfo = $this->find(['store_id' => $userInfo['store_id'], 'print_code' => $print_code, 'status' => OrderStatus::NOPAY], 'id')) {
+        if (!$orderInfo = $this->find(['clinic_id' => $userInfo['clinic_id'], 'print_code' => $print_code, 'status' => OrderStatus::NOPAY], 'id')) {
             return error('本次会诊已结束');
         }
 
@@ -537,7 +265,7 @@ class DoctorOrderModel extends Crud {
 
         // 获取处方笺
         $orderInfo['notes'] = [];
-        if ($orderInfo['patient_name'] || $orderInfo['enum_source'] == OrderSource::BUG_DRUG) {
+        if ($orderInfo['patient_name'] || $orderInfo['enum_source'] == OrderSource::BUY_DRUG) {
             $orderInfo['notes'] = $this->getDb()->table('dayi_doctor_order_notes')->where(['order_id' => $order_id])->field('id,category,relation_id,name,package_spec,dispense_unit,dosage_unit,single_amount,total_amount,usages,frequency,drug_days,dose,remark,price')->order('id')->select();
             foreach ($orderInfo['notes'] as $k => $v) {
                 $orderInfo['notes'][$k]['price'] = round_dollar($v['price']);
@@ -554,55 +282,27 @@ class DoctorOrderModel extends Crud {
     }
 
     /**
-     * 获取药品列表
-     * @return array
-     */
-    public function getDrugList ($user_id, array $post)
-    {
-        $post['page_size'] = max(6, $post['page_size']);
-        $post['name']      = trim_space($post['name']);
-
-        // 用户获取
-        $userInfo = $this->getUserInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-        $post['store_id'] = $userInfo['store_id'];
-
-        $drugModel = new DrugModel();
-
-        $count = $drugModel->getCount($post);
-        if ($count > 0) {
-            $pagesize = getPageParams($post['page'], $count, $post['page_size']);
-            $list = $drugModel->getList($post, 'id desc', $pagesize['limitstr']);
-        }
-
-        return success([
-            'total_count' => $count,
-            'page_size' => $post['page_size'],
-            'list' => $list ? $list : []
-        ]);
-    }
-
-    /**
      * 获取会诊单列表
      * @return array
      */
     public function getDoctorOrderList ($user_id, array $post)
     {
-        $post['page_size'] = max(6, $post['page_size']);
+        $post['page_size']    = max(6, $post['page_size']);
+        $post['print_code']   = trim_space($post['print_code']);
+        $post['doctor_name']  = trim_space($post['doctor_name']);
+        $post['patient_name'] = trim_space($post['patient_name']);
 
         // 条件查询
         $condition = [];
 
         // 用户获取
-        $userInfo = $this->getUserInfo($user_id);
+        $adminModel = new AdminModel();
+        $userInfo = $adminModel->checkAdminInfo($user_id);
         if ($userInfo['errorcode'] !== 0) {
             return $userInfo;
         }
         $userInfo = $userInfo['result'];
-        $condition['store_id'] = $userInfo['store_id'];
+        $condition['clinic_id'] = $userInfo['clinic_id'];
 
         // 搜索时间
         $post['start_time'] = strtotime($post['start_time']);
@@ -622,6 +322,30 @@ class DoctorOrderModel extends Crud {
             $condition['doctor_id'] = intval($post['doctor_id']);
         }
 
+        // 搜索医生姓名
+        if ($post['doctor_name']) {
+            $conditionForDoctor = [
+                'clinic_id' => $condition['clinic_id']
+            ];
+            if (preg_match('/^\d+$/', $post['doctor_name'])) {
+                if (!validate_telephone($post['doctor_name'])) {
+                    $conditionForDoctor['user_name'] = $post['doctor_name'];
+                } else {
+                    $conditionForDoctor['telephone'] = $post['doctor_name'];
+                }
+            } else {
+                $conditionForDoctor['user_name'] = $post['doctor_name'];
+            }
+            if (!$doctor = $adminModel->find($conditionForDoctor, 'id')) {
+                return success([
+                    'total_count' => 0,
+                    'page_size' => $post['page_size'],
+                    'list' => []
+                ]);
+            }
+            $condition['doctor_id'] = $doctor['id'];
+        }
+
         // 搜索患者
         if ($post['patient_name']) {
             $condition['patient_name'] = ['like', '%' . $post['patient_name'] . '%'];
@@ -636,7 +360,7 @@ class DoctorOrderModel extends Crud {
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             $list = $this->select($condition, 'id,enum_source,doctor_id,patient_name,patient_gender,patient_age,patient_tel,pay,discount,payway,create_time,status', 'id desc', $pagesize['limitstr']);
-            $userNames = (new AdminModel())->getAdminNames(array_column($list, 'doctor_id'));
+            $userNames = $adminModel->getAdminNames(array_column($list, 'doctor_id'));
             foreach ($list as $k => $v) {
                 $list[$k]['source']      = OrderSource::getMessage($v['enum_source']);
                 $list[$k]['patient_age'] = Gender::showAge($v['patient_age']);
@@ -709,8 +433,15 @@ class DoctorOrderModel extends Crud {
      * 编辑保存会诊单
      * @return array
      */
-    public function saveDoctorCard ($post)
+    public function saveDoctorCard ($user_id, $post)
     {
+        // 用户获取
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+        if ($userInfo['errorcode'] !== 0) {
+            return $userInfo;
+        }
+        $userInfo = $userInfo['result'];
+
         // 验证会诊单
         $post['advanced'] = true;
         $post = $this->validationDoctorCard($post);
@@ -719,7 +450,7 @@ class DoctorOrderModel extends Crud {
         }
         $post = $post['result'];
 
-        if (!$orderInfo = $this->find(['id' => $post['order_id'], 'status' => OrderStatus::NOPAY], 'update_time')) {
+        if (!$orderInfo = $this->find(['id' => $post['order_id'], 'clinic_id' => $userInfo['clinic_id'], 'status' => OrderStatus::NOPAY], 'update_time')) {
             return error('订单不存在');
         }
 
@@ -790,10 +521,10 @@ class DoctorOrderModel extends Crud {
      * 创建会诊单
      * @return array
      */
-    public function doctorCreateCard ($user_id, array $post)
+    public function createDoctorCard ($user_id, array $post)
     {
         // 用户获取
-        $userInfo = $this->getUserInfo($user_id);
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
         if ($userInfo['errorcode'] !== 0) {
             return $userInfo;
         }
@@ -808,15 +539,15 @@ class DoctorOrderModel extends Crud {
 
         // 生成取号号码
         if (!$post['advanced']) {
-            $printCode = $this->buildPrintCode($userInfo['store_id']);
+            $printCode = $this->buildPrintCode($userInfo['clinic_id']);
         }
 
         // 生成会诊单
         if (!$orderId = $this->getDb()->transaction(function ($db) use($post, $userInfo, $printCode) {
             // 新增订单
             if (!$orderId = $db->insert($this->table, [
-                'store_id'          => $userInfo['store_id'],
-                'doctor_id'         => $userInfo['id'],
+                'clinic_id'         => $userInfo['clinic_id'],
+                'doctor_id'         => $post['doctor_id'] ? $post['doctor_id'] : $userInfo['id'],
                 'enum_source'       => OrderSource::DOCTOR,
                 'print_code'        => $printCode,
                 'patient_id'        => $post['patient_id'],
@@ -866,51 +597,26 @@ class DoctorOrderModel extends Crud {
     }
 
     /**
-     * 获取用户信息
-     * @param $user_id
-     * @return array
-     */
-    public function getUserInfo ($user_id)
-    {
-        // 用户获取
-        if (!$userInfo = (new AdminModel())->getAdminInfo($user_id)) {
-            return error('用户不存在');
-        }
-        if ($userInfo['status'] != CommonStatus::OK) {
-            return error('你已被禁用');
-        }
-        if (!$userInfo['store_id']) {
-            return error('你未绑定诊所');
-        }
-        return success($userInfo);
-    }
-
-    /**
      * 验证会诊单
      * @return array
      */
     protected function validationDoctorCard (array $post)
     {
         $post['order_id']          = intval($post['order_id']);
+        $post['doctor_id']         = intval($post['doctor_id']);
         $post['patient_name']      = trim_space($post['patient_name']);
-        $post['patient_name']      = $post['patient_name'] ? $post['patient_name'] : null;
         $post['patient_gender']    = Gender::format($post['patient_gender']);
         $post['patient_gender']    = $post['patient_gender'] ? $post['patient_gender'] : null;
         $post['patient_age']       = Gender::validationAge($post['patient_age']);
         $post['patient_tel']       = trim_space($post['patient_tel']);
-        $post['patient_tel']       = $post['patient_tel'] ? $post['patient_tel'] : null;
         $post['patient_complaint'] = trim_space($post['patient_complaint']);
-        $post['patient_complaint'] = $post['patient_complaint'] ? $post['patient_complaint'] : null;
         $post['patient_allergies'] = trim_space($post['patient_allergies']);
-        $post['patient_allergies'] = $post['patient_allergies'] ? $post['patient_allergies'] : null;
         $post['patient_diagnosis'] = trim_space($post['patient_diagnosis']);
-        $post['patient_diagnosis'] = $post['patient_diagnosis'] ? $post['patient_diagnosis'] : null;
         $post['note_dose']         = max(0, intval($post['note_dose']));
         $post['note_side']         = NoteSide::format($post['note_side']);
         $post['advice']            = trim_space($post['advice']);
-        $post['advice']            = $post['advice'] ? $post['advice'] : null;
         $post['voice']             = ishttp($post['voice']) ? $post['voice'] : null;
-        $post['notes']             = $post['notes'] ? array_slice(json_decode(htmlspecialchars_decode($post['notes']), true), 0, 20) : [];
+        $post['notes']             = $post['notes'] ? array_slice(json_decode(htmlspecialchars_decode($post['notes']), true), 0, 30) : [];
 
         if ($post['patient_tel'] && !validate_telephone($post['patient_tel'])) {
             return error('患者手机号填写不正确');
@@ -959,15 +665,15 @@ class DoctorOrderModel extends Crud {
 
     /**
      * 生成打印票据号（4位）
-     * @param $store_id 门店ID
+     * @param $clinic_id 门店ID
      * @return string
      */
-    protected function buildPrintCode ($store_id)
+    protected function buildPrintCode ($clinic_id)
     {
         $code = (rand() % 10) . (rand() % 10) . (rand() % 10) . (rand() % 10);
         // 检查重复
-        if ($this->getDb()->table($this->table)->where(['store_id' => $store_id, 'print_code' => intval($code), 'status' => OrderStatus::NOPAY])->count()) {
-            return $this->buildPrintCode($store_id);
+        if ($this->getDb()->table($this->table)->where(['clinic_id' => $clinic_id, 'print_code' => intval($code), 'status' => OrderStatus::NOPAY])->count()) {
+            return $this->buildPrintCode($clinic_id);
         }
         return $code;
     }
@@ -1061,7 +767,7 @@ class DoctorOrderModel extends Crud {
         if (isset($list[1])) {
             foreach ($list[1] as $k => $v) {
                 // 检查库存
-                if (!$list[1][$k] = $drugModel->find(['id' => $k, 'status' => CommonStatus::OK, 'amount' => ['>=', $v]], 'name,package_spec,dispense_unit,dosage_unit,retail_price')) {
+                if (!$list[1][$k] = $drugModel->find(['id' => $k, 'status' => CommonStatus::OK, 'amount' => ['>=' . $v]], 'name,package_spec,dispense_unit,dosage_unit,retail_price')) {
                     return false;
                 }
             }
@@ -1119,7 +825,7 @@ class DoctorOrderModel extends Crud {
             }
         }
 
-        unset($drugModel, $drugModel, $notes, $list);
+        unset($drugModel, $notes, $list);
         return $result;
     }
 

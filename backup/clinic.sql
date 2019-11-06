@@ -118,7 +118,7 @@ INSERT INTO `admin_roles` VALUES (4, '护士', '门诊护士');
 DROP TABLE IF EXISTS `admin_user`;
 CREATE TABLE `admin_user`  (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `store_id` int(10) UNSIGNED NULL DEFAULT 0 COMMENT '门店ID',
+  `clinic_id` int(10) UNSIGNED NULL DEFAULT 0 COMMENT '门店ID',
   `user_name` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '登录账号',
   `telephone` varchar(11) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '手机号',
   `password` varchar(60) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '密码',
@@ -133,7 +133,7 @@ CREATE TABLE `admin_user`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `telephone`(`telephone`) USING BTREE,
   UNIQUE INDEX `user_name`(`user_name`) USING BTREE,
-  INDEX `store_id`(`store_id`) USING BTREE
+  INDEX `clinic_id`(`clinic_id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 13 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '管理员表' ROW_FORMAT = Compact;
 
 -- ----------------------------
@@ -149,7 +149,7 @@ INSERT INTO `admin_user` VALUES (12, 1, NULL, '18708518284', '$2y$10$e0mbS5g4K2c
 DROP TABLE IF EXISTS `dayi_department`;
 CREATE TABLE `dayi_department`  (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `store_id` int(10) UNSIGNED NULL DEFAULT 0 COMMENT '门店ID',
+  `clinic_id` int(10) UNSIGNED NULL DEFAULT 0 COMMENT '门店ID',
   `parent_id` int(10) UNSIGNED NULL DEFAULT 0 COMMENT '上级科室ID',
   `ident` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '科室编号',
   `name` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '科室名称',
@@ -161,8 +161,8 @@ CREATE TABLE `dayi_department`  (
   `update_time` datetime(0) NULL DEFAULT NULL COMMENT '更新时间',
   `create_time` datetime(0) NULL DEFAULT NULL COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `index`(`store_id`, `ident`) USING BTREE,
-  INDEX `store_id`(`store_id`) USING BTREE,
+  UNIQUE INDEX `index`(`clinic_id`, `ident`) USING BTREE,
+  INDEX `clinic_id`(`clinic_id`) USING BTREE,
   INDEX `parent_id`(`parent_id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '诊所科室' ROW_FORMAT = Dynamic;
 
@@ -186,7 +186,7 @@ CREATE TABLE `dayi_department_doctor`  (
 DROP TABLE IF EXISTS `dayi_doctor_order`;
 CREATE TABLE `dayi_doctor_order`  (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `store_id` int(10) UNSIGNED NULL DEFAULT NULL COMMENT '门店ID',
+  `clinic_id` int(10) UNSIGNED NULL DEFAULT NULL COMMENT '门店ID',
   `print_code` mediumint(4) UNSIGNED NULL DEFAULT NULL COMMENT '打印票据号',
   `doctor_id` int(10) UNSIGNED NULL DEFAULT 0 COMMENT '医生ID',
   `enum_source` tinyint(1) NULL DEFAULT NULL COMMENT '来源',
@@ -210,7 +210,7 @@ CREATE TABLE `dayi_doctor_order`  (
   `update_time` datetime(0) NULL DEFAULT NULL COMMENT '更新时间',
   `create_time` datetime(0) NULL DEFAULT NULL COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `store_id`(`store_id`) USING BTREE,
+  INDEX `clinic_id`(`clinic_id`) USING BTREE,
   INDEX `doctor_id`(`doctor_id`) USING BTREE,
   INDEX `print_code`(`print_code`) USING BTREE,
   INDEX `create_time`(`create_time`) USING BTREE,
@@ -251,7 +251,7 @@ CREATE TABLE `dayi_doctor_order_notes`  (
 DROP TABLE IF EXISTS `dayi_drug`;
 CREATE TABLE `dayi_drug`  (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `store_id` int(10) UNSIGNED NULL DEFAULT NULL COMMENT '门店ID',
+  `clinic_id` int(10) UNSIGNED NULL DEFAULT NULL COMMENT '门店ID',
   `name` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '药品名称',
   `drug_type` tinyint(1) NULL DEFAULT 0 COMMENT '药品类型 1西药 2中成药 3草药 4材料',
   `approval_num` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '国药准字号',
@@ -278,7 +278,7 @@ CREATE TABLE `dayi_drug`  (
   `update_time` datetime(0) NULL DEFAULT NULL COMMENT '更新时间',
   `create_time` datetime(0) NULL DEFAULT NULL COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `store_id`(`store_id`) USING BTREE
+  INDEX `clinic_id`(`clinic_id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '药品库存' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -14456,7 +14456,7 @@ CREATE TABLE `dayi_pay_flow`  (
 DROP TABLE IF EXISTS `dayi_stock`;
 CREATE TABLE `dayi_stock`  (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `store_id` int(10) UNSIGNED NULL DEFAULT NULL COMMENT '门店ID',
+  `clinic_id` int(10) UNSIGNED NULL DEFAULT NULL COMMENT '门店ID',
   `order_code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '单号',
   `enum_type` tinyint(1) UNSIGNED NULL DEFAULT 0 COMMENT '出入库类型 1出库 2入库',
   `enum_way` tinyint(3) UNSIGNED NULL DEFAULT 0 COMMENT '出入库方式',
@@ -14478,7 +14478,7 @@ CREATE TABLE `dayi_stock`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `order_code`(`order_code`) USING BTREE,
   INDEX `create_time`(`create_time`) USING BTREE,
-  INDEX `store_id`(`store_id`) USING BTREE
+  INDEX `clinic_id`(`clinic_id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '进销存' ROW_FORMAT = Dynamic;
 
 -- ----------------------------

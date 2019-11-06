@@ -60,10 +60,13 @@ class DbMysql extends Db {
 
         $vals = [];
         $parameters = [];
+        $hasValue = false;
         foreach($content as $k => $v) {
             $prepare = str_replace('.', '_', $k);
             if (is_array($v)) {
-                $vals[] = isset($v[2]) ? $v[2] : 'AND';
+                if ($hasValue) {
+                    $vals[] = isset($v[2]) ? $v[2] : 'AND';
+                }
                 $vals[] = $k;
                 $vals[] = $v[0];
                 if ($v[0] == 'in' || $v[0] == 'IN' || $v[0] == 'not in' || $v[0] == 'NOT IN') {
@@ -93,22 +96,30 @@ class DbMysql extends Db {
                         $parameters[$prepare] = $v[1];
                     }
                 }
+                if (isset($v[3])) {
+                    $vals[] = $v[3];
+                }
             } else if (is_null($v)) {
-                $vals[] = 'AND';
+                if ($hasValue) {
+                    $vals[] = 'AND';
+                }
                 $vals[] = $k;
                 $vals[] = 'IS NULL';
             } else {
-                $vals[] = 'AND';
+                if ($hasValue) {
+                    $vals[] = 'AND';
+                }
                 $vals[] = $k;
                 $vals[] = '=';
                 $vals[] = ':' . $prepare;
                 $parameters[$prepare] = $v;
             }
+            $hasValue = true;
         }
 
         $this->bindValue($parameters);
 
-        unset($parameters, $vals[0]);
+        unset($parameters);
         return implode(' ', $vals);
     }
 

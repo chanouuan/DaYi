@@ -5,6 +5,10 @@ namespace app\controllers;
 use ActionPDO;
 use app\models\AdminModel;
 use app\models\DoctorOrderModel;
+use app\models\TreatmentModel;
+use app\models\DrugModel;
+use app\models\StockModel;
+use app\models\ServerClinicModel;
 
 /**
  * 诊所服务端接口
@@ -18,17 +22,28 @@ class ServerClinic extends ActionPDO {
             'login'                => ['interval' => 1000],
             'logout'               => ['interval' => 1000],
             'getUserProfile'       => ['interval' => 1000],
-            'doctorCreateCard'     => ['interval' => 1000],
+            'createDoctorCard'     => ['interval' => 1000],
             'getTodayOrderList'    => ['interval' => 200],
             'getDoctorOrderList'   => ['interval' => 200],
-            'getDrugList'          => ['interval' => 200],
             'getDoctorOrderDetail' => ['interval' => 1000],
-            'unionConsultation'    => ['interval' => 1000],
             'saveDoctorCard'       => ['interval' => 1000],
             'buyDrug'              => ['interval' => 1000],
             'localCharge'          => ['interval' => 1000],
             'getMessageCount'      => ['interval' => 1000],
-            'addDrug'              => ['interval' => 1000]
+            'getDrugList'          => ['interval' => 200],
+            'saveDrug'             => ['interval' => 1000],
+            'getTreatmentList'     => ['interval' => 200],
+            'saveTreatment'        => ['interval' => 1000],
+            'getEmployeeList'      => ['interval' => 200],
+            'saveEmployee'         => ['interval' => 1000],
+            'getClinicDoctors'     => ['interval' => 1000],
+            'microLogin'           => ['interval' => 1000],
+            'addStock'             => ['interval' => 1000],
+            'getStockPullOrPush'   => ['interval' => 200],
+            'confirmStock'         => ['interval' => 1000],
+            'delStock'             => ['interval' => 1000],
+            'batchDetail'          => ['interval' => 1000],
+            'stockDetail'          => ['interval' => 1000]
         ];
     }
 
@@ -36,17 +51,32 @@ class ServerClinic extends ActionPDO {
     {
         if ($this->_G['user']) {
             // 获取权限
-            $this->_G['token'][5] = json_decode($this->_G['token'][5], true);
+            $this->_G['token'][4] = isset($this->_G['token'][4]) ? explode('^', $this->_G['token'][4]) : [];
+            // 忽略列表
             $ignoreAccess = [
                 'getUserProfile',
-                'getDoctorList',
-                'getDoctorOrderList',
-                'getTodayOrderList',
-                'getDrugList'
+                'getDoctorList'
             ];
+            // 重命名
+            $map = [
+                'getTodayOrderList'  => 'createDoctorCard',
+                'getDoctorOrderList' => 'saveDoctorCard',
+                'getDrugList'        => 'saveDrug',
+                'getTreatmentList'   => 'saveDrug',
+                'saveTreatment'      => 'saveDrug',
+                'getEmployeeList'    => 'saveEmployee',
+                'getEmployeeRole'    => 'saveEmployee',
+                'getStockList'       => 'addStock',
+                'getStockPullOrPush' => 'addStock',
+                'confirmStock'       => 'addStock',
+                'delStock'           => 'addStock',
+                'batchDetail'        => 'addStock',
+            ];
+            // 权限值
+            $action = isset($map[$this->_action]) ? $map[$this->_action] : $this->_action;
             // 权限验证
-            if (!in_array($this->_action, $ignoreAccess)) {
-                if (empty(array_intersect(['ANY', $this->_action], $this->_G['token'][5]))) {
+            if (!in_array($action, $ignoreAccess)) {
+                if (empty(array_intersect(['ANY', $action], $this->_G['token'][4]))) {
                     json(null,'权限不足', 100);
                 }
             }
@@ -54,13 +84,60 @@ class ServerClinic extends ActionPDO {
     }
 
     /**
+     * 获取诊所医生
+     * @param *clinic_id 诊所
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getClinicDoctors ()
+    {
+        return success((new AdminModel())->getUserByDoctor(intval(getgpc('clinic_id'))));
+    }
+
+    /**
+     * 登录 (签名验证)
+     * @param *clinic_id 诊所
+     * @param *username 登录账号
+     * @param *time 当前时间戳
+     * @param *nonce_str 自定义随机数
+     * @param *sig 签名
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *     "user_id":1,
+     *     "token":"", //登录凭证
+     * }}
+     */
+    public function microLogin ()
+    {
+        // 校验sign
+        $authResult = checkSignPass($_POST);
+        if($authResult['errorcode'] !== 0) {
+            return $authResult;
+        }
+
+        return (new AdminModel())->login([
+            'clinic_id' => $_POST['clinic_id'],
+            'username'  => $_POST['username'],
+            'password'  => true
+        ]);
+    }
+
+    /**
      * 登录
+     * @param *clinic_id 诊所
      * @param *username 手机号/账号
      * @param *password 密码
      * @return array
      * {
-     * "errorcode":0, // 错误码 0成功 -1失败
-     * "message":"", //错误消息
+     * "errorcode":0,
+     * "message":"",
      * "result":{
      *     "user_id":1,
      *     "avatar":"", //头像
@@ -74,8 +151,9 @@ class ServerClinic extends ActionPDO {
     public function login ()
     {
         return (new AdminModel())->login([
-            'username' => $_POST['username'],
-            'password' => $_POST['password']
+            'clinic_id' => $_POST['clinic_id'],
+            'username'  => $_POST['username'],
+            'password'  => strval($_POST['password'])
         ]);
     }
 
@@ -84,8 +162,8 @@ class ServerClinic extends ActionPDO {
      * @login
      * @return array
      * {
-     * "errorcode":0, // 错误码 0成功 -1失败
-     * "message":"", //错误消息
+     * "errorcode":0,
+     * "message":"",
      * "result":[]
      * }
      */
@@ -99,29 +177,24 @@ class ServerClinic extends ActionPDO {
      * @login
      * @return array
      * {
-     * "errorcode":0, // 错误码 0成功 -1失败
-     * "message":"", //错误消息
+     * "errorcode":0,
+     * "message":"",
      * "result":{
      *     "id":1,
      *     "avatar":"", //头像
      *     "telephone":"", //手机号
      *     "nickname":"", //昵称
      *     "unread_count":0, //未读消息数
-     *     "store_info":{
-     *          "id":1,
-     *          "name":"", // 诊所
-     *          "status":1 // 状态
-     *     }
+     *     "clinic_info":{}
      * }}
      */
     public function getUserProfile ()
     {
-        $result = (new DoctorOrderModel())->getUserProfile($this->_G['user']['user_id']);
+        $result = (new ServerClinicModel())->getUserProfile($this->_G['user']['user_id']);
         if ($result['errorcode'] !== 0) {
             return $result;
         }
-        $result['result']['role'] = json_decode($this->_G['token'][4], true);
-        $result['result']['permission'] = $this->_G['token'][5];
+        $result['result']['permission'] = $this->_G['token'][4];
         return $result;
     }
 
@@ -143,16 +216,16 @@ class ServerClinic extends ActionPDO {
      * @param notes string 处方笺 [{category:处方类别,relation_id:药品ID/诊疗项目ID,single_amount:单量,total_amount:总量,usages:用法,frequency:频率,drug_days:用药天数,remark:备注}]
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":{
      *      "order_id":1, //订单号
      *      "print_code":1, //票据号
      * }}
      */
-    public function doctorCreateCard ()
+    public function createDoctorCard ()
     {
-        return (new DoctorOrderModel())->doctorCreateCard($this->_G['user']['user_id'], $_POST);
+        return (new DoctorOrderModel())->createDoctorCard($this->_G['user']['user_id'], $_POST);
     }
 
     /**
@@ -166,7 +239,7 @@ class ServerClinic extends ActionPDO {
      * @param patient_name 患者
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":{
      *     "total":1, //总条数
@@ -198,7 +271,7 @@ class ServerClinic extends ActionPDO {
      * @param end_time 结束时间
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":{
      *     "total":1, //总条数
@@ -221,7 +294,7 @@ class ServerClinic extends ActionPDO {
      * @param *order_id 订单ID
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":{
      *     "id":"",
@@ -267,22 +340,6 @@ class ServerClinic extends ActionPDO {
     }
 
     /**
-     * 联诊
-     * @login
-     * @param *print_code 取号号码
-     * @return array
-     * {
-     * "errorcode":0, //错误码 0成功 -1失败
-     * "message":"",
-     * "result":[] //同详情
-     * }
-     */
-    public function unionConsultation ()
-    {
-        return (new DoctorOrderModel())->unionConsultation($this->_G['user']['user_id'], getgpc('print_code'));
-    }
-
-    /**
      * 编辑保存会诊单
      * @login
      * @param *order_id 订单ID
@@ -299,14 +356,14 @@ class ServerClinic extends ActionPDO {
      * @param *notes string 处方笺 [{category:处方类别,relation_id:药品ID/诊疗项目ID,single_amount:单量,total_amount:总量,usages:用法,frequency:频率,drug_days:用药天数,remark:备注}]
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function saveDoctorCard ()
     {
-        return (new DoctorOrderModel())->saveDoctorCard($_POST);
+        return (new DoctorOrderModel())->saveDoctorCard($this->_G['user']['user_id'], $_POST);
     }
 
     /**
@@ -319,7 +376,7 @@ class ServerClinic extends ActionPDO {
      * @param *notes string 药品 [{category:处方类别,relation_id:药品ID,total_amount:总量}]
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":{
      *     "order_id":1 //订单ID
@@ -343,7 +400,7 @@ class ServerClinic extends ActionPDO {
      * @param remark 备注
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
@@ -358,7 +415,7 @@ class ServerClinic extends ActionPDO {
      * @param *name 患者姓名
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[{
      *     "id":0,
@@ -372,24 +429,24 @@ class ServerClinic extends ActionPDO {
      */
     public function searchPatient ()
     {
-        return (new DoctorOrderModel())->searchPatient($_POST);
+        return (new ServerClinicModel())->searchPatient($_POST);
     }
 
     /**
      * 搜索药品
-     * @param *store_id 门店ID
+     * @param *clinic_id 门店ID
      * @param *drug_type 药品类型
      * @param *name 药品名称
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function searchDrug ()
     {
-        return (new DoctorOrderModel())->searchDrug($_POST);
+        return (new ServerClinicModel())->searchDrug($_POST);
     }
 
     /**
@@ -398,114 +455,128 @@ class ServerClinic extends ActionPDO {
      * @param *name 国药准字/药品名称/拼音码/五笔码/条形码
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function searchDrugDict ()
     {
-        return (new DoctorOrderModel())->searchDrugDict($_POST);
+        return (new ServerClinicModel())->searchDrugDict($_POST);
     }
 
     /**
      * 搜索诊疗项目
-     * @param *store_id 门店ID
+     * @param *clinic_id 门店ID
      * @param *name 名称
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function searchTreatmentSheet ()
     {
-        return (new DoctorOrderModel())->searchTreatmentSheet($_POST);
+        return (new ServerClinicModel())->searchTreatmentSheet($_POST);
     }
 
     /**
      * 获取过敏史
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function getAllergyEnum ()
     {
-        return (new DoctorOrderModel())->getAllergyEnum();
+        return (new ServerClinicModel())->getAllergyEnum();
     }
 
     /**
      * 获取药品用法
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function getUsageEnum ()
     {
-        return (new DoctorOrderModel())->getUsageEnum();
+        return (new ServerClinicModel())->getUsageEnum();
     }
 
     /**
      * 获取药品频率
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function getNoteFrequencyEnum ()
     {
-        return (new DoctorOrderModel())->getNoteFrequencyEnum();
+        return (new ServerClinicModel())->getNoteFrequencyEnum();
     }
 
     /**
      * 获取药品剂型
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function getDosageEnum ()
     {
-        return (new DoctorOrderModel())->getDosageEnum();
+        return (new ServerClinicModel())->getDosageEnum();
     }
 
     /**
      * 获取药品单位
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
-    public function getUnitEnum ()
+    public function getDrugUnitEnum ()
     {
-        return (new DoctorOrderModel())->getUnitEnum();
+        return (new ServerClinicModel())->getDrugUnitEnum();
+    }
+
+    /**
+     * 获取诊疗项目单位
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getTreatmentUnitEnum ()
+    {
+        return (new ServerClinicModel())->getTreatmentUnitEnum();
     }
 
     /**
      * 获取支付方式
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function getLocalPayWay ()
     {
-        return (new DoctorOrderModel())->getLocalPayWay();
+        return (new ServerClinicModel())->getLocalPayWay();
     }
 
     /**
@@ -513,14 +584,14 @@ class ServerClinic extends ActionPDO {
      * @login
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
     public function getDoctorList ()
     {
-        return (new DoctorOrderModel())->getDoctorList($this->_G['user']['user_id']);
+        return (new ServerClinicModel())->getDoctorList($this->_G['user']['user_id'], getgpc('all'));
     }
 
     /**
@@ -528,7 +599,7 @@ class ServerClinic extends ActionPDO {
      * @param *version 版本号
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":{
      *     "upgrade_mode":"", //升级方式（1询问2强制3静默）
@@ -540,7 +611,7 @@ class ServerClinic extends ActionPDO {
      */
     public function versionCheck ()
     {
-        return (new DoctorOrderModel())->versionCheck(getgpc('version'));
+        return (new ServerClinicModel())->versionCheck(getgpc('version'));
     }
 
     /**
@@ -549,7 +620,7 @@ class ServerClinic extends ActionPDO {
      * @param *type 类型
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
@@ -565,7 +636,7 @@ class ServerClinic extends ActionPDO {
      * @param *url 地址
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
@@ -584,7 +655,7 @@ class ServerClinic extends ActionPDO {
      * @param drug_type 类型
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":{
      *     "total":1, //总条数
@@ -593,7 +664,7 @@ class ServerClinic extends ActionPDO {
      */
     public function getDrugList ()
     {
-        return (new DoctorOrderModel())->getDrugList($this->_G['user']['user_id'], $_POST);
+        return (new DrugModel())->getDrugList($this->_G['user']['user_id'], $_POST);
     }
 
     /**
@@ -602,14 +673,297 @@ class ServerClinic extends ActionPDO {
      * @param drug_type 药品类型
      * @return array
      * {
-     * "errorcode":0, //错误码 0成功 -1失败
+     * "errorcode":0,
      * "message":"",
      * "result":[]
      * }
      */
-    public function addDrug ()
+    public function saveDrug ()
     {
-        return (new DoctorOrderModel())->addDrug($this->_G['user']['user_id'], $_POST);
+        return (new DrugModel())->saveDrug($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 获取药品信息
+     * @param id 药品ID
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getDrugInfo ()
+    {
+        return (new DrugModel())->getDrugInfo(getgpc('id'));
+    }
+
+    /**
+     * 获取诊疗项目列表
+     * @login
+     * @param page 当前页
+     * @param name 名称
+     * @param status 状态
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *     "total":1, //总条数
+     *     "list":[]
+     * }}
+     */
+    public function getTreatmentList ()
+    {
+        return (new TreatmentModel())->getTreatmentList($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 添加诊疗项目
+     * @login
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function saveTreatment ()
+    {
+        return (new TreatmentModel())->saveTreatment($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 获取诊疗项目信息
+     * @param id 诊疗项目ID
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getTreatmentInfo ()
+    {
+        return success((new TreatmentModel())->getTreatmentInfo(getgpc('id')));
+    }
+
+    /**
+     * 获取员工列表
+     * @login
+     * @param page 当前页
+     * @param name 名称
+     * @param status 状态
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *     "total":1, //总条数
+     *     "list":[]
+     * }}
+     */
+    public function getEmployeeList ()
+    {
+        return (new AdminModel())->getEmployeeList($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 添加员工
+     * @login
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function saveEmployee ()
+    {
+        return (new AdminModel())->saveEmployee($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 获取员工信息
+     * @param id
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getEmployeeInfo ()
+    {
+        return success((new AdminModel())->getEmployeeInfo(getgpc('id')));
+    }
+
+    /**
+     * 获取员工职位
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getEmployeeTitle ()
+    {
+        return (new ServerClinicModel())->getEmployeeTitle();
+    }
+
+    /**
+     * 获取员工角色
+     * @login
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getEmployeeRole ()
+    {
+        return success((new AdminModel())->getEmployeeRole($this->_G['user']['user_id']));
+    }
+
+    /**
+     * 获取库存列表
+     * @login
+     * @param page 当前页
+     * @param name 名称
+     * @param drug_type 类型
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *     "total":1, //总条数
+     *     "list":[]
+     * }}
+     */
+    public function getStockList ()
+    {
+        $_POST['is_procure'] = 1; // 已采购
+        return (new DrugModel())->getDrugList($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 获取出入库列表
+     * @login
+     * @param page 当前页
+     * @param stock_type 出入库类型
+     * @param stock_way 出入库方式
+     * @param start_time 开始时间
+     * @param end_time 结束时间
+     * @param status 状态
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *     "total":1, //总条数
+     *     "list":[]
+     * }}
+     */
+    public function getStockPullOrPush ($user_id, array $post)
+    {
+        return (new StockModel())->getStockPullOrPush($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 获取出入库方式
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getStockWayEnum ()
+    {
+        return (new ServerClinicModel())->getStockWayEnum();
+    }
+
+    /**
+     * 添加出入库
+     * @login
+     * @param stock_type 出入库类型
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *      "stock_id":1
+     * }}
+     */
+    public function addStock ()
+    {
+        return (new StockModel())->addStock($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 确认出入库
+     * @login
+     * @param stock_id 出入库ID
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *      "stock_id":1
+     * }}
+     */
+    public function confirmStock ()
+    {
+        return (new StockModel())->confirmStock($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 删除出入库
+     * @login
+     * @param stock_id 出入库ID
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{}
+     * }
+     */
+    public function delStock ()
+    {
+        return (new StockModel())->delStock($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 批次详情
+     * @login
+     * @param drug_id 药品ID
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{}
+     * }
+     */
+    public function batchDetail ()
+    {
+        return (new StockModel())->batchDetail($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 出入库详情
+     * @param stock_id 出入库ID
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{}
+     * }
+     */
+    public function stockDetail ()
+    {
+        return (new StockModel())->stockDetail(getgpc('stock_id'));
     }
 
 }

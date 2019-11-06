@@ -1,21 +1,19 @@
 <?php
 /**
- * 角色
+ * 出入库类型
  */
 
 namespace app\common;
 
-class Role
+class StockType
 {
 
-    const ADMIN  = 1;
-    const DOCTOR = 3;
-    const NURSE  = 4;
+    const PULL = 1;
+    const PUSH = 2;
 
     static $message = [
-        1 => '管理员',
-        3 => '医生',
-        4 => '护士'
+        1 => '入库',
+        2 => '出库'
     ];
 
     public static function format ($code)

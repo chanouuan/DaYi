@@ -20,6 +20,16 @@ class DrugType
         4 => '材料'
     ];
 
+    /**
+     * 是否西药/中成药
+     * @param $code
+     * @return bool
+     */
+    public static function isWestNeutralDrug ($code)
+    {
+        return in_array($code, [self::WESTERN, self::NEUTRAL]);
+    }
+
     public static function format ($code)
     {
         return isset(self::$message[$code]) ? $code : null;

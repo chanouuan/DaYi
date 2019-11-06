@@ -9,7 +9,7 @@ class OrderSource
 {
 
     const DOCTOR      = 1;
-    const BUG_DRUG    = 2;
+    const BUY_DRUG    = 2;
     const APPOINTMENT = 3;
 
     static $message = [
