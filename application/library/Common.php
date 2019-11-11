@@ -301,11 +301,8 @@ function submitcheck ($formhash = null, $disposable = false)
     if (empty($formhash) || false === strpos(APPLICATION_URL, $_SERVER['HTTP_HOST'])) return false;
     if (authcode(rawurldecode($formhash), 'DECODE') !== formhash()) return false;
     if (false === $disposable) return true;
-    \app\library\DB::getInstance()->delete('__tablepre__hashcheck', 'dateline < ' . (TIMESTAMP - 3600));
-    return \app\library\DB::getInstance()->insert('__tablepre__hashcheck', array(
-            'hash' => md5_mini($formhash),
-            'dateline' => TIMESTAMP
-    ));
+    \app\library\DB::getInstance()->table('__tablepre__hashcheck')->where('dateline < ' . (TIMESTAMP - 3600))->delete();
+    return \app\library\DB::getInstance()->table('__tablepre__hashcheck')->insert(['hash' => md5_mini($formhash), 'dateline' => TIMESTAMP]);
 }
 
 function mkdirm ($path)
@@ -729,7 +726,7 @@ function json ($data, $message = '', $errorcode = 0, $httpcode = 200) {
         http_response_code($httpcode);
     }
     header('Content-Type: application/json; charset=utf-8');
-    if ($errorcode >= 0) {
+    if ($errorcode === 0) {
         echo json_unicode_encode(success($data, $message, $errorcode));
     } else {
         echo json_unicode_encode(error($data, $message, $errorcode));

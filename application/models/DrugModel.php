@@ -7,11 +7,88 @@ use app\common\DrugType;
 use app\common\DrugDosage;
 use app\common\NoteUsage;
 use app\common\NoteFrequency;
+use app\common\GenerateCache;
 use Crud;
 
 class DrugModel extends Crud {
 
     protected $table = 'dayi_drug';
+
+    /**
+     * 药品库存效验
+     * @return bool
+     */
+    public function validationAmount ($clinic_id, array $data, $force = true, $collect = true)
+    {
+        if ($clinic_id) {
+            // 获取诊所
+            if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
+                return false;
+            }
+            // is_ds:库存效验
+            $force = $clinicInfo['is_ds'];
+        }
+        $list = [];
+        foreach ($data as $k => $v) {
+            if (isset($v['amount'])) {
+                if ($force) {
+                    $v['amount'] = ['>=' . abs($v['amount'])];
+                } else {
+                    unset($v['amount']);
+                }
+            }
+            $v['id'] = $k;
+            $v['status'] = CommonStatus::OK;
+            if ($collect) {
+                if (!$list[$k] = $this->find($v, 'drug_type,name,package_spec,dispense_unit,dosage_unit,retail_price')) {
+                    return false;
+                }
+            } else {
+                if (!$this->count($v)) {
+                    return false;
+                }
+            }
+        }
+        unset($data);
+        return $collect ? $list : true;
+    }
+
+    /**
+     * 更新药品库存 + / -
+     * @return bool
+     */
+    public function updateAmount ($clinic_id, $op, array $data)
+    {
+        if ($clinic_id) {
+            // 获取诊所
+            if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
+                return false;
+            }
+            // is_cp:收费即发药 is_rp:退费即退药
+            if ($op == '-') {
+                // 收费
+                if (!$clinicInfo['is_cp']) {
+                    return true;
+                }
+            } elseif ($op == '+') {
+                // 退费
+                if (!$clinicInfo['is_rp']) {
+                    return true;
+                }
+            } else {
+                return false;
+            }
+        }
+        return $this->getDb()->transaction(function ($db) use($op, $data) {
+            foreach ($data as $k => $v) {
+                $v['amount'] = ['amount' . $op . abs($v['amount'])];
+                if (!$db->table($this->table)->where(['id' => $k])->update($v)) {
+                    return false;
+                }
+            }
+            return true;
+        });    
+    }
 
     /**
      * 添加药品
@@ -94,12 +171,12 @@ class DrugModel extends Crud {
                 $data['status'] = $post['status'];
             }
             $data['update_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-            if (!$this->getDb()->update($this->table, $data, ['id' => $post['id'], 'clinic_id' => $post['clinic_id']])) {
+            if (!$this->getDb()->where(['id' => $post['id'], 'clinic_id' => $data['clinic_id']])->update($data)) {
                 return error('该药品/材料已存在！');
             }
         } else {
             $data['create_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-            if (!$this->getDb()->insert($this->table, $data)) {
+            if (!$this->getDb()->insert($data)) {
                 return error('请勿添加重复的药品/材料！');
             }
         }
@@ -115,26 +192,30 @@ class DrugModel extends Crud {
      * @param $limit
      * @return array
      */
-    public function search ($clinic_id, $drug_type, $name, $limit = 5)
+    public function search (array $post, $field = null, $limit = 5)
     {
         $condition = [
-            'clinic_id' => $clinic_id,
-            'status'   => CommonStatus::OK
+            'clinic_id' => $post['clinic_id'],
+            'status'    => CommonStatus::OK
         ];
-        if ($drug_type) {
-            $condition['drug_type'] = is_array($drug_type) ? ['in', $drug_type] : $drug_type;
+        if ($post['drug_type']) {
+            $condition['drug_type'] = is_array($post['drug_type']) ? ['in', $post['drug_type']] : $post['drug_type'];
         }
-        if ($name) {
-            $condition['name']    = ['like', $name . '%', 'and ('];
-            $condition['py_code'] = ['like', $name . '%', 'or'];
-            $condition['wb_code'] = ['like', $name . '%', 'or', ')'];
+        if ($post['name']) {
+            $condition['name']    = ['like', '%' . $post['name'] . '%', 'and ('];
+            $condition['barcode'] = ['=', $post['name'], 'or'];
+            $condition['py_code'] = ['like', $post['name'] . '%', 'or'];
+            $condition['wb_code'] = ['like', $post['name'] . '%', 'or', ')'];
         }
-        if (!$list = $this->select($condition, 'id,drug_type,name,package_spec,dispense_unit,dosage_unit,dosage_amount,retail_price as price,amount,usages,frequency', null, $limit)) {
+        if ($post['is_procure']) {
+            $condition['is_procure'] = 1;
+        }
+        $field = $field ? $field : 'id,drug_type,name,package_spec,dispense_unit,dosage_unit,dosage_amount,retail_price as price,amount,manufactor_name,usages,frequency';
+        if (!$list = $this->select($condition, $field, null, $limit)) {
             return [];
         }
         foreach ($list as $k => $v) {
             $list[$k]['price'] = round_dollar($v['price']);
-            $list[$k]['reserve'] = $v['amount'] . $v['dispense_unit'];
         }
         return $list;
     }
@@ -153,7 +234,7 @@ class DrugModel extends Crud {
             $condition['drug_type'] = is_array($drug_type) ? ['in', $drug_type] : $drug_type;
         }
         if ($name) {
-            $condition['name']    = ['like', $name . '%', 'and ('];
+            $condition['name']    = ['like', '%' . $name . '%', 'and ('];
             $condition['py_code'] = ['like', $name . '%', 'or'];
             $condition['wb_code'] = ['like', $name . '%', 'or'];
             $condition['approval_num'] = ['=', $name, 'or'];
@@ -179,7 +260,7 @@ class DrugModel extends Crud {
     public function getDrugInfo ($id)
     {
         $id = intval($id);
-        if (!$info = $this->getDb()->table($this->table)->field('id,drug_type,approval_num,name,package_spec,manufactor_name,dispense_unit,basic_amount,basic_unit,dosage_unit,dosage_amount,py_code,wb_code,dosage_type,barcode,goods_name,standard_code,drug_code,retail_price,is_antibiotic,usages,frequency,status')->where(['id' => $id])->limit(1)->find()) {
+        if (!$info = $this->find(['id' => $id], 'id,drug_type,approval_num,name,package_spec,manufactor_name,dispense_unit,basic_amount,basic_unit,dosage_unit,dosage_amount,py_code,wb_code,dosage_type,barcode,goods_name,standard_code,drug_code,retail_price,is_antibiotic,usages,frequency,status')) {
             return [];
         }
         $info['drug_type']     = strval($info['drug_type']);
@@ -223,7 +304,7 @@ class DrugModel extends Crud {
             $condition['wb_code'] = ['like', $post['name'] . '%', 'or', ')'];
         }
 
-        $count = $this->getDb()->table($this->table)->where($condition)->count();
+        $count = $this->count($condition);
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             $list = $this->select($condition, 'id,drug_type,name,package_spec,dispense_unit,purchase_price,retail_price,amount,manufactor_name,status', 'id desc', $pagesize['limitstr']);

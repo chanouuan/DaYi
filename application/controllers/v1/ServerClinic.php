@@ -27,6 +27,7 @@ class ServerClinic extends ActionPDO {
             'getDoctorOrderList'   => ['interval' => 200],
             'getDoctorOrderDetail' => ['interval' => 1000],
             'saveDoctorCard'       => ['interval' => 1000],
+            'printTemplete'        => ['interval' => 1000],
             'buyDrug'              => ['interval' => 1000],
             'localCharge'          => ['interval' => 1000],
             'getMessageCount'      => ['interval' => 1000],
@@ -39,7 +40,9 @@ class ServerClinic extends ActionPDO {
             'getClinicDoctors'     => ['interval' => 1000],
             'microLogin'           => ['interval' => 1000],
             'addStock'             => ['interval' => 1000],
+            'editStock'            => ['interval' => 1000],
             'getStockPullOrPush'   => ['interval' => 200],
+            'getStockSale'         => ['interval' => 200],
             'confirmStock'         => ['interval' => 1000],
             'delStock'             => ['interval' => 1000],
             'batchDetail'          => ['interval' => 1000],
@@ -55,7 +58,9 @@ class ServerClinic extends ActionPDO {
             // 忽略列表
             $ignoreAccess = [
                 'getUserProfile',
-                'getDoctorList'
+                'getDoctorList',
+                'printTemplete',
+                'getDoctorOrderDetail'
             ];
             // 重命名
             $map = [
@@ -68,9 +73,12 @@ class ServerClinic extends ActionPDO {
                 'getEmployeeRole'    => 'saveEmployee',
                 'getStockList'       => 'addStock',
                 'getStockPullOrPush' => 'addStock',
+                'getStockSale'       => 'addStock',
                 'confirmStock'       => 'addStock',
                 'delStock'           => 'addStock',
                 'batchDetail'        => 'addStock',
+                'stockDetail'        => 'addStock',
+                'editStock'          => 'addStock'
             ];
             // 权限值
             $action = isset($map[$this->_action]) ? $map[$this->_action] : $this->_action;
@@ -225,7 +233,7 @@ class ServerClinic extends ActionPDO {
      */
     public function createDoctorCard ()
     {
-        return (new DoctorOrderModel())->createDoctorCard($this->_G['user']['user_id'], $_POST);
+        return (new DoctorOrderModel($this->_G['user']['user_id']))->createDoctorCard($_POST);
     }
 
     /**
@@ -260,7 +268,7 @@ class ServerClinic extends ActionPDO {
      */
     public function getDoctorOrderList ()
     {
-        return (new DoctorOrderModel())->getDoctorOrderList($this->_G['user']['user_id'], $_POST);
+        return (new DoctorOrderModel($this->_G['user']['user_id']))->getDoctorOrderList($_POST);
     }
 
     /**
@@ -286,11 +294,12 @@ class ServerClinic extends ActionPDO {
      */
     public function getTodayOrderList ()
     {
-        return (new DoctorOrderModel())->getTodayOrderList($this->_G['user']['user_id'], $_POST);
+        return (new DoctorOrderModel($this->_G['user']['user_id']))->getTodayOrderList($_POST);
     }
 
     /**
      * 查看会诊单详情
+     * @login
      * @param *order_id 订单ID
      * @return array
      * {
@@ -336,7 +345,7 @@ class ServerClinic extends ActionPDO {
      */
     public function getDoctorOrderDetail ()
     {
-        return (new DoctorOrderModel())->getDoctorOrderDetail(getgpc('order_id'));
+        return (new DoctorOrderModel($this->_G['user']['user_id']))->getDoctorOrderDetail(getgpc('order_id'));
     }
 
     /**
@@ -363,7 +372,7 @@ class ServerClinic extends ActionPDO {
      */
     public function saveDoctorCard ()
     {
-        return (new DoctorOrderModel())->saveDoctorCard($this->_G['user']['user_id'], $_POST);
+        return (new DoctorOrderModel($this->_G['user']['user_id']))->saveDoctorCard($_POST);
     }
 
     /**
@@ -384,7 +393,7 @@ class ServerClinic extends ActionPDO {
      */
     public function buyDrug ()
     {
-        return (new DoctorOrderModel())->buyDrug($this->_G['user']['user_id'], $_POST);
+        return (new DoctorOrderModel($this->_G['user']['user_id']))->buyDrug($_POST);
     }
 
     /**
@@ -407,7 +416,7 @@ class ServerClinic extends ActionPDO {
      */
     public function localCharge ()
     {
-        return (new DoctorOrderModel())->localCharge($this->_G['user']['user_id'], $_POST);
+        return (new DoctorOrderModel($this->_G['user']['user_id']))->localCharge($_POST);
     }
 
     /**
@@ -616,6 +625,7 @@ class ServerClinic extends ActionPDO {
 
     /**
      * 打印模板
+     * @login
      * @param *order_id 订单ID
      * @param *type 类型
      * @return array
@@ -627,12 +637,13 @@ class ServerClinic extends ActionPDO {
      */
     public function printTemplete ()
     {
-        return (new DoctorOrderModel())->printTemplete(getgpc('type'), getgpc('order_id'));
+        return (new DoctorOrderModel($this->_G['user']['user_id']))->printTemplete(getgpc('type'), getgpc('order_id'));
     }
 
     /**
      * 录音回调
-     * @param *order_id 订单ID
+     * @param *clinic_id 诊所
+     * @param *order_id 订单
      * @param *url 地址
      * @return array
      * {
@@ -643,7 +654,7 @@ class ServerClinic extends ActionPDO {
      */
     public function notifyVoice ()
     {
-        return (new DoctorOrderModel())->notifyVoice(getgpc('order_id'), getgpc('url'));
+        return (new DoctorOrderModel(null, getgpc('clinic_id')))->notifyVoice(getgpc('order_id'), getgpc('url'));
     }
 
     /**
@@ -695,7 +706,7 @@ class ServerClinic extends ActionPDO {
      */
     public function getDrugInfo ()
     {
-        return (new DrugModel())->getDrugInfo(getgpc('id'));
+        return success((new DrugModel())->getDrugInfo(getgpc('id')));
     }
 
     /**
@@ -866,9 +877,30 @@ class ServerClinic extends ActionPDO {
      *     "list":[]
      * }}
      */
-    public function getStockPullOrPush ($user_id, array $post)
+    public function getStockPullOrPush ()
     {
-        return (new StockModel())->getStockPullOrPush($this->_G['user']['user_id'], $_POST);
+        return (new StockModel($this->_G['user']['user_id']))->getStockPullOrPush($_POST);
+    }
+
+    /**
+     * 获取进销存详情
+     * @login
+     * @param page 当前页
+     * @param stock_way 出入库方式
+     * @param start_time 开始时间
+     * @param end_time 结束时间
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *     "total":1, //总条数
+     *     "list":[]
+     * }}
+     */
+    public function getStockSale ()
+    {
+        return (new StockModel($this->_G['user']['user_id']))->getStockSale($_POST);
     }
 
     /**
@@ -899,7 +931,24 @@ class ServerClinic extends ActionPDO {
      */
     public function addStock ()
     {
-        return (new StockModel())->addStock($this->_G['user']['user_id'], $_POST);
+        return (new StockModel($this->_G['user']['user_id']))->addStock($_POST);
+    }
+
+    /**
+     * 编辑出入库
+     * @login
+     * @param stock_id 出入库ID
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *      "stock_id":1
+     * }}
+     */
+    public function editStock ()
+    {
+        return (new StockModel($this->_G['user']['user_id']))->editStock($_POST);
     }
 
     /**
@@ -916,7 +965,7 @@ class ServerClinic extends ActionPDO {
      */
     public function confirmStock ()
     {
-        return (new StockModel())->confirmStock($this->_G['user']['user_id'], $_POST);
+        return (new StockModel($this->_G['user']['user_id']))->confirmStock($_POST);
     }
 
     /**
@@ -932,7 +981,7 @@ class ServerClinic extends ActionPDO {
      */
     public function delStock ()
     {
-        return (new StockModel())->delStock($this->_G['user']['user_id'], $_POST);
+        return (new StockModel($this->_G['user']['user_id']))->delStock($_POST);
     }
 
     /**
@@ -948,11 +997,12 @@ class ServerClinic extends ActionPDO {
      */
     public function batchDetail ()
     {
-        return (new StockModel())->batchDetail($this->_G['user']['user_id'], $_POST);
+        return (new StockModel($this->_G['user']['user_id']))->batchDetail($_POST);
     }
 
     /**
      * 出入库详情
+     * @login
      * @param stock_id 出入库ID
      * @return array
      * {
@@ -963,7 +1013,7 @@ class ServerClinic extends ActionPDO {
      */
     public function stockDetail ()
     {
-        return (new StockModel())->stockDetail(getgpc('stock_id'));
+        return (new StockModel($this->_G['user']['user_id']))->stockDetail(getgpc('stock_id'));
     }
 
 }

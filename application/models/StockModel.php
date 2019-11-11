@@ -2,32 +2,39 @@
 
 namespace app\models;
 
+use app\common\CommonStatus;
 use app\common\StockType;
 use app\common\StockWay;
 use app\common\DrugType;
+use app\common\GenerateCache;
 use Crud;
 
 class StockModel extends Crud {
 
-    protected $table = 'dayi_stock';
+    protected $table    = 'dayi_stock';
+    protected $userInfo = null;
+
+    public function __construct ($user_id)
+    {
+        // 分区
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+        if ($userInfo['errorcode'] !== 0) {
+            json(null, $userInfo['message'], $userInfo['errorcode']);
+        }
+        $this->userInfo = $userInfo['result'];
+        list($this->link, $this->partition) = GenerateCache::getClinicPartition($this->userInfo['clinic_id']);
+    }
 
     /**
      * 获取出入库列表
      * @return array
      */
-    public function getStockPullOrPush ($user_id, array $post)
+    public function getStockPullOrPush (array $post)
     {
     	$post['page_size'] = max(6, $post['page_size']);
 
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
         $condition = [
-            'clinic_id' => $userInfo['clinic_id']
+            'clinic_id' => $this->userInfo['clinic_id']
         ];
         $post['start_time'] = strtotime($post['start_time']);
         $post['end_time']   = strtotime($post['end_time']);
@@ -44,7 +51,7 @@ class StockModel extends Crud {
             $condition['stock_way'] = $post['stock_way'];
         }
 
-        $count = $this->getDb()->table($this->table)->where($condition)->count();
+        $count = $this->count($condition);
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             $list = $this->select($condition, 'id,stock_type,stock_way,supplier,employee_id,purchase_price,create_admin_id,confirm_admin_id,stock_date,status', 'id desc', $pagesize['limitstr']);
@@ -79,10 +86,11 @@ class StockModel extends Crud {
     {
         $stock_id = intval($stock_id);
 
-        if (!$stockInfo = $this->find(['id' => $stock_id], 'id,stock_type,stock_way,supplier,employee_id,purchase_price,create_admin_id,confirm_admin_id,stock_date,purchase_price,remark,status')) {
+        if (!$stockInfo = $this->find(['id' => $stock_id], 'id,stock_type,stock_way,supplier,invoice,employee_id,purchase_price,create_admin_id,confirm_admin_id,stock_date,purchase_price,remark,status')) {
             return error('出入库单不存在');
         }
 
+        $stockInfo['stock_way']       = StockWay::getMessage($stockInfo['stock_way']);
         $stockInfo['purchase_price']  = round_dollar($stockInfo['purchase_price']);
         // 获取用户姓名
         $admins = (new AdminModel())->getAdminNames([
@@ -94,7 +102,12 @@ class StockModel extends Crud {
         unset($admins);
 
         // 获取药品详情
-        $stockInfo['details'] = $this->getDb()->table('dayi_stock_detail')->where(['stock_id' => $stockInfo['id']])->field('id,drug_type,name,package_spec,dispense_unit,retail_price,manufactor_name,amount,purchase_price,batch_number,valid_time')->order('id')->select();
+        $stockInfo['details'] = $this->getDb()
+            ->table('dayi_stock_detail')
+            ->field('id,drug_type,name,package_spec,dispense_unit,retail_price,manufactor_name,amount,purchase_price,batch_number,valid_time')
+            ->where(['stock_id' => $stockInfo['id']])
+            ->order('id')
+            ->select();
         foreach ($stockInfo['details'] as $k => $v) {
             $stockInfo['details'][$k]['drug_type']      = DrugType::getMessage($v['drug_type']);
             $stockInfo['details'][$k]['retail_price']   = round_dollar($v['retail_price']);
@@ -105,30 +118,85 @@ class StockModel extends Crud {
     }
 
     /**
+     * 获取进销存详情
+     * @return array
+     */
+    public function getStockSale (array $post)
+    {
+        $post['page_size'] = max(6, $post['page_size']);
+        $post['drug_id']   = intval($post['drug_id']);
+
+        $condition = [
+            'detail.clinic_id' => $this->userInfo['clinic_id'],
+            'detail.drug_id'   => $post['drug_id'],
+            'stock.status'     => 1
+        ];
+        $post['start_time'] = strtotime($post['start_time']);
+        $post['end_time']   = strtotime($post['end_time']);
+        if ($post['start_time'] && $post['end_time'] && $post['start_time'] <= $post['end_time']) {
+            $condition['stock.stock_date'] = ['between', [date('Y-m-d', $post['start_time']), date('Y-m-d', $post['end_time'])]];
+        }
+        if (!is_null(StockWay::format($post['stock_way']))) {
+            $condition['stock.stock_way'] = $post['stock_way'];
+        }
+
+        $count = $this->getDb()
+            ->table('dayi_stock_detail__partition__ detail left join dayi_stock__partition__ stock on stock.id = detail.stock_id')
+            ->where($condition)
+            ->count();
+        if ($count > 0) {
+            $pagesize = getPageParams($post['page'], $count, $post['page_size']);
+            $list = $this->getDb()
+                ->field('detail.id,detail.amount,detail.dispense_unit,detail.retail_price,detail.purchase_price,detail.batch_number,detail.valid_time,stock.stock_way,stock.stock_date,stock.supplier')
+                ->table('dayi_stock_detail__partition__ detail left join dayi_stock__partition__ stock on stock.id = detail.stock_id')
+                ->where($condition)
+                ->order('detail.id desc')
+                ->limit($pagesize['limitstr'])
+                ->select();
+            if ($list) {
+                foreach ($list as $k => $v) {
+                    $list[$k]['retail_price']   = round_dollar($v['retail_price']);
+                    $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
+                    $list[$k]['stock_way']      = StockWay::getMessage($v['stock_way']);
+                }
+            }
+        }
+
+        return success([
+            'total_count' => $count,
+            'page_size' => $post['page_size'],
+            'list' => $list ? $list : []
+        ]);
+    }
+
+    /**
      * 批次详情
      * @return array
      */
-    public function batchDetail ($user_id, $post)
+    public function batchDetail (array $post)
     {
-        $post['drug_id'] = intval($post['drug_id']);
-
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
+        $post['page_size'] = max(6, $post['page_size']);
+        $post['drug_id']   = intval($post['drug_id']);
 
         $condition = [
-            'clinic_id' => $userInfo['clinic_id'],
+            'clinic_id' => $this->userInfo['clinic_id'],
             'drug_id'   => $post['drug_id'],
             'amount'    => ['>0']
         ];
 
-        $count = $this->getDb()->table('dayi_stock_detail')->where($condition)->count();
+        $count = $this->getDb()
+            ->table('dayi_stock_detail')
+            ->where($condition)
+            ->count();
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, $post['page_size']);
-            $list = $this->getDb()->table('dayi_stock_detail')->field('id,name,package_spec,manufactor_name,dispense_unit,amount,purchase_price,batch_number,valid_time')->where($condition)->order('id desc')->limit($pagesize['limitstr'])->select();
+            $list = $this->getDb()
+                ->table('dayi_stock_detail')
+                ->field('id,name,package_spec,manufactor_name,dispense_unit,amount,purchase_price,batch_number,valid_time')
+                ->where($condition)
+                ->order('id desc')
+                ->limit($pagesize['limitstr'])
+                ->select();
             if ($list) {
                 foreach ($list as $k => $v) {
                     $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
@@ -147,27 +215,20 @@ class StockModel extends Crud {
      * 删除出入库
      * @return array
      */
-    public function delStock ($user_id, $post)
+    public function delStock (array $post)
     {
         $post['stock_id'] = intval($post['stock_id']);
 
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
-        if (!$stockInfo = $this->find(['id' => $post['stock_id'], 'clinic_id' => $userInfo['clinic_id'], 'status' => CommonStatus::NOT], 'id')) {
+        if (!$stockInfo = $this->find(['id' => $post['stock_id'], 'clinic_id' => $this->userInfo['clinic_id'], 'status' => CommonStatus::NOT], 'id')) {
             return error('出入库单不存在');
         }
 
         if (!$this->getDb()->transaction(function ($db) use($stockInfo) {
             // 删除出入库
-            if (!$db->delete($this->table, ['id' => $stockInfo['id'], 'status' => CommonStatus::NOT])) {
+            if (!$db->where(['id' => $stockInfo['id'], 'status' => CommonStatus::NOT])->delete()) {
                 return false;
             }
-            if (!$db->delete('dayi_stock_detail', ['stock_id' => $stockInfo['id']])) {
+            if (!$db->partition($this->partition)->table('dayi_stock_detail')->where(['stock_id' => $stockInfo['id']])->delete()) {
                 return false;
             }
             return true;
@@ -182,67 +243,80 @@ class StockModel extends Crud {
      * 确认出入库
      * @return array
      */
-    public function confirmStock ($user_id, $post)
+    public function confirmStock (array $post)
     {
         $post['stock_id'] = intval($post['stock_id']);
 
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
-        if (!$stockInfo = $this->find(['id' => $post['stock_id'], 'clinic_id' => $userInfo['clinic_id'], 'status' => CommonStatus::NOT], 'id')) {
+        if (!$stockInfo = $this->find(['id' => $post['stock_id'], 'clinic_id' => $this->userInfo['clinic_id'], 'status' => CommonStatus::NOT], 'id,stock_type')) {
             return error('出入库单不存在');
         }
 
         // 获取药品详情
-        if (!$details = $this->getDb()->table('dayi_stock_detail')->where(['stock_id' => $stockInfo['id']])->field('drug_id,name,amount,purchase_price')->order('id')->select()) {
+        if (!$details = $this->getDb()->table('dayi_stock_detail')->where(['stock_id' => $stockInfo['id']])->field('drug_id,amount,purchase_price')->order('id')->select()) {
             return error('药品详情不存在');
         }
 
         $details = $this->totalAmount($details);
 
-        // 检查库存
         $drugModel = new DrugModel();
+
+        // 检查库存
+        $validations = [];
         foreach ($details as $k => $v) {
             if ($v['amount'] < 0) {
-                if (!$drugModel->find(['id' => $k, 'status' => CommonStatus::OK, 'amount' => ['>=' . abs($v['amount'])]], 'id')) {
-                    return error('药品「' . $v['name'] . '」库存不足');
-                }
+                $validations[$k]['amount'] = $v['amount'];
+            }
+        }
+        if ($validations) {
+            if (!$drugModel->validationAmount(null, $validations, true, false)) {
+                return error('库存不足，请检查');
             }
         }
 
-        if (!$this->getDb()->transaction(function ($db) use($stockInfo, $details, $userInfo) {
+        if (!$this->getDb()->transaction(function ($db) use($stockInfo, $details, $drugModel) {
             // 更新出入库
-            if (!$db->update($this->table, [
-                'confirm_admin_id' => $userInfo['id'],
+            if (!$db->where(['id' => $stockInfo['id'], 'status' => CommonStatus::NOT])->update([
+                'confirm_admin_id' => $this->userInfo['id'],
                 'status'           => CommonStatus::OK,
                 'update_time'      => date('Y-m-d H:i:s', TIMESTAMP)
-            ], [
-                'id'     => $stockInfo['id'],
-                'status' => CommonStatus::NOT
             ])) {
                 return false;
             }
             // 减库存 or 加库存
+            $data = [];
             foreach ($details as $k => $v) {
-                $data = [
-                    'amount' => ['amount' . ($v['amount'] >= 0 ? '+' : '') . $v['amount']]
-                ];
+                $data[$k]['amount'] = $v['amount'];
                 if ($v['amount'] > 0) {
                     // 更新药品进货价
-                    $data['is_procure'] = 1;
-                    $data['purchase_price'] = $v['purchase_price'];
-                }
-                if (!$db->update('dayi_drug', $data, ['id' => $k])) {
-                    return false;
+                    $data[$k]['is_procure'] = 1;
+                    $data[$k]['purchase_price'] = $v['purchase_price'];
                 }
             }
-            return true;
+            return $drugModel->updateAmount(null, StockType::getOp($stockInfo['stock_type']), $data);
         })) {
             return error('库存不足');
+        }
+
+        return success('ok');
+    }
+
+    /**
+     * 编辑出入库
+     * @return array
+     */
+    public function editStock (array $post)
+    {
+        $post['stock_id'] = intval($post['stock_id']);
+        $post['invoice']  = trim_space($post['invoice']);
+
+        if (!$stockInfo = $this->find(['id' => $post['stock_id'], 'clinic_id' => $this->userInfo['clinic_id']], 'id')) {
+            return error('出入库单不存在');
+        }
+
+        if (false === $this->getDb()->where(['id' => $stockInfo['id']])->update([
+            'invoice' => $post['invoice']
+        ])) {
+            return error('保存数据失败');
         }
 
         return success('ok');
@@ -252,15 +326,9 @@ class StockModel extends Crud {
      * 新增出入库
      * @return array
      */
-    public function addStock ($user_id, $post)
+    public function addStock (array $post)
     {
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-        $post['clinic_id'] = $userInfo['clinic_id'];
+        $post['clinic_id'] = $this->userInfo['clinic_id'];
 
         // 验证出入库表单
         $post = $this->validationStockForm($post);
@@ -269,9 +337,9 @@ class StockModel extends Crud {
         }
         $post = $post['result'];
 
-        if (!$stockId = $this->getDb()->transaction(function ($db) use($post, $userInfo) {
+        if (!$stockId = $this->getDb()->transaction(function ($db) use($post) {
             // 新增出入库
-            if (!$stockId = $db->insert($this->table, [
+            if (!$stockId = $db->insert([
                 'clinic_id'       => $post['clinic_id'],
                 'stock_type'      => $post['stock_type'],
                 'stock_way'       => $post['stock_way'],
@@ -281,22 +349,22 @@ class StockModel extends Crud {
                 'employee_id'     => $post['employee_id'],
                 'purchase_price'  => $post['purchase_price'],
                 'remark'          => $post['remark'],
-                'create_admin_id' => $userInfo['id'],
+                'create_admin_id' => $this->userInfo['id'],
                 'update_time'     => date('Y-m-d H:i:s', TIMESTAMP),
                 'create_time'     => date('Y-m-d H:i:s', TIMESTAMP)
-            ], null, null, true)) {
+            ], null, true)) {
                 return false;
             }
             // 新增出入库详情
             foreach ($post['details'] as $k => $v) {
                 $post['details'][$k]['stock_id'] = $stockId;
             }
-            if (!$db->insert('dayi_stock_detail', $post['details'])) {
+            if (!$db->partition($this->partition)->table('dayi_stock_detail')->insert($post['details'])) {
                 return false;
             }
             return $stockId;
         })) {
-            return error('库存不足，不能保存数据');
+            return error('保存数据失败');
         }
 
         unset($post);
@@ -351,16 +419,15 @@ class StockModel extends Crud {
      */
     protected function arrangeDetails (array $details, $stock_type, $clinic_id)
     {
-        $drugModel = new DrugModel();
-
         foreach ($details as $k => $v) {
             $details[$k]['drug_id']        = intval($v['drug_id']);
-            $details[$k]['amount']         = intval($v['amount']);
+            $details[$k]['amount']         = max(0, intval($v['amount']));
             $details[$k]['amount']         = $stock_type == StockType::PUSH ? 0 - $details[$k]['amount'] : $details[$k]['amount'];
             $details[$k]['purchase_price'] = $stock_type == StockType::PUSH ? null : max(0, intval(floatval($v['purchase_price']) * 100));
             $details[$k]['batch_number']   = trim_space($v['batch_number']);
             $details[$k]['valid_time']     = strtotime($v['valid_time']);
             $details[$k]['valid_time']     = $details[$k]['valid_time'] ? date('Y-m-d', $details[$k]['valid_time']) : null;
+            $details[$k]['manufactor_name'] = trim_space($v['manufactor_name']);
             if (!$details[$k]['drug_id'] || !$details[$k]['amount']) {
                 return false;
             }
@@ -372,20 +439,16 @@ class StockModel extends Crud {
             $list[$v['drug_id']] += $v['amount'];
         }
 
-        // 获取药品信息
+        // 检查库存
+        $validations = [];
         foreach ($list as $k => $v) {
-            $condition = [
-                'id' => $k, 
-                'clinic_id' => $clinic_id,
-                'status' => CommonStatus::OK
-            ];
+            $validations[$k]['clinic_id'] = $clinic_id;
             if ($stock_type == StockType::PUSH) {
-                // 检查库存
-                $condition['amount'] = ['>=' . abs($v)]
+                $validations[$k]['amount'] = abs($v);
             }
-            if (!$list[$k] = $drugModel->find($condition, 'drug_type,name,package_spec,dispense_unit,retail_price,manufactor_name')) {
-                return false;
-            }
+        }
+        if (!$list = (new DrugModel())->validationAmount(null, $validations, true, true)) {
+            return false;
         }
 
         $result = [];
@@ -398,7 +461,7 @@ class StockModel extends Crud {
                 'package_spec'    => $list[$v['drug_id']]['package_spec'],
                 'dispense_unit'   => $list[$v['drug_id']]['dispense_unit'],
                 'retail_price'    => $list[$v['drug_id']]['retail_price'],
-                'manufactor_name' => $list[$v['drug_id']]['manufactor_name'],
+                'manufactor_name' => $v['manufactor_name'],
                 'amount'          => $v['amount'],
                 'purchase_price'  => $v['purchase_price'],
                 'batch_number'    => $v['batch_number'],
@@ -407,7 +470,7 @@ class StockModel extends Crud {
             ];
         }
 
-        unset($drugModel, $details, $list);
+        unset($details, $list);
         return $result;
     }
 
@@ -439,7 +502,6 @@ class StockModel extends Crud {
             if (!isset($list[$v['drug_id']])) {
                 $list[$v['drug_id']] = [];
             }
-            $list[$v['drug_id']]['name'] = $v['name'];
             $list[$v['drug_id']]['purchase_price'] = $v['purchase_price'];
             $list[$v['drug_id']]['amount'] += $v['amount'];
         }

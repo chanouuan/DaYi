@@ -16,6 +16,22 @@ class StockType
         2 => '出库'
     ];
 
+    /**
+     * 获取操作符号
+     * @param $code
+     * @return string
+     */
+    public static function getOp ($code)
+    {
+        if ($code == self::PULL) {
+            return '+';
+        }
+        if ($code == self::PUSH) {
+            return '-';
+        }
+        return null;
+    }
+
     public static function format ($code)
     {
         return isset(self::$message[$code]) ? $code : null;

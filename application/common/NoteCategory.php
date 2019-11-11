@@ -21,13 +21,13 @@ class NoteCategory
     ];
 
     /**
-     * 是否药品
+     * 是否药品 & 材料
      * @param $code
      * @return bool
      */
     public static function isDrug ($code)
     {
-        return in_array($code, [self::WESTERN, self::CHINESE]);
+        return in_array($code, [self::WESTERN, self::CHINESE, self::MATERIAL]);
     }
 
     public static function format ($code)

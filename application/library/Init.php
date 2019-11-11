@@ -389,24 +389,40 @@ class Crud {
     protected $fields = [];
     protected $variables = [];
 
-    protected $table = '';
     protected $pk = 'id';
+    protected $table = null;
+    protected $partition = null;
 
     protected $link = 'mysql';
 
-    public function __construct() {
-        if (empty($this->table)) {
-            $this->table = get_class($this);
-            $this->table = '__tablepre__' . substr($this->table, strrpos($this->table, '\\') + 1, -5);
+    public function __construct (array $setting = [])
+    {
+        if (isset($setting['pk'])) {
+            $this->pk = $setting['pk'];
+        }
+        if (isset($setting['table'])) {
+            if ($setting['table']) {
+                $this->table = $setting['table'];
+            } else {
+                $this->table = get_class($this);
+                $this->table = '__tablepre__' . substr($this->table, strrpos($this->table, '\\') + 1, -5);
+            }
+        }
+        if (isset($setting['partition'])) {
+            $this->partition = $setting['partition'];
+        }
+        if (isset($setting['link'])) {
+            $this->link = $setting['link'];
         }
     }
 
-    protected function getDb($link = null) {
-        $link = $link ? $link : $this->link;
-        return \app\library\DB::getInstance($link);
+    protected function getDb ($link = null, $partition = null)
+    {
+        return \app\library\DB::getInstance($link ? $link : $this->link)->table($this->table)->partition($partition ? $partition : ($partition === false ? null : $this->partition));
     }
 
-    public function __set($name, $value){
+    public function __set ($name, $value)
+    {
         if($name === $this->pk) {
             $this->variables[$this->pk] = $value;
         } else {
@@ -416,7 +432,7 @@ class Crud {
         }
     }
 
-    public function __get($name)
+    public function __get ($name)
     {
         if(is_array($this->variables)) {
             if(array_key_exists($name, $this->variables)) {
@@ -432,7 +448,8 @@ class Crud {
         return null;
     }
 
-    protected function save($id = 0) {
+    protected function save ($id = 0)
+    {
         $this->variables[$this->pk] = $id ? $id : $this->variables[$this->pk];
 
         $fieldsvals = [];
@@ -443,12 +460,13 @@ class Crud {
         }
 
         if($fieldsvals) {
-            return $this->getDb()->update($this->table, $fieldsvals,  '`' . $this->pk . '` = :' . $this->pk, $this->variables);
+            return $this->getDb()->where([$this->pk => $id])->bindValue($this->variables)->update($fieldsvals);
         }
         return null;
     }
 
-    public function create() {
+    protected function create ()
+    {
         $fieldsvals = [];
         foreach($this->variables as $k => $v) {
             if($k !== $this->pk) {
@@ -457,35 +475,44 @@ class Crud {
         }
 
         if($fieldsvals) {
-            return $this->getDb()->insert($this->table, $fieldsvals, $this->variables);
+            return $this->getDb()->bindValue($this->variables)->insert($fieldsvals);
         }
         return null;
     }
 
-    public function delete($id = 0) {
+    protected function delete ($id = 0)
+    {
         $id = (empty($this->variables[$this->pk])) ? $id : $this->variables[$this->pk];
 
         if(!empty($id)) {
-            return $this->getDb()->delete($this->table, '`' . $this->pk . '` = :' . $this->pk, [$this->pk => $id]);
+            return $this->getDb()->where([$this->pk => $id])->delete();
         }
         return null;
     }
 
-    public function get($id = 0) {
+    protected function get ($id = 0)
+    {
         $id = $id ? $id : $this->variables[$this->pk];
 
         if(!empty($id)) {
-            $this->variables = $this->getDb()->field('*')->table($this->table)->where('`' . $this->pk . '` = :' . $this->pk)->bindValue([$this->pk => $id])->find();
+            $this->variables = $this->getDb()->where([$this->pk => $id])->find();
         }
         return $this->variables;
     }
 
-    public function find ($condition, $field = null, $order = null) {
-        return $this->getDb()->table($this->table)->field($field)->where($condition)->order($order)->limit(1)->find();
+    protected function find (array $condition, $field = null, $order = null)
+    {
+        return $this->getDb()->field($field)->where($condition)->order($order)->limit(1)->find();
     }
 
-    public function select ($condition, $field = null, $order = null, $limit = null) {
-        return $this->getDb()->table($this->table)->field($field)->where($condition)->order($order)->limit($limit)->select();
+    protected function select (array $condition, $field = null, $order = null, $limit = null)
+    {
+        return $this->getDb()->field($field)->where($condition)->order($order)->limit($limit)->select();
+    }
+
+    protected function count (array $condition)
+    {
+        return $this->getDb()->where($condition)->count();
     }
 
 }
@@ -1113,11 +1140,11 @@ class RateLimit
             }
             $param['version'] = ['version+1'];
             unset($param['skey']);
-            if (!\app\library\DB::getInstance()->ignoreLevel(2)->update('__tablepre__ratelimit', $param, ['skey' => $key, 'version' => $limitVal['version']])) {
+            if (!\app\library\DB::getInstance()->ignoreLevel(2)->table('__tablepre__ratelimit')->where(['skey' => $key, 'version' => $limitVal['version']])->update($param)) {
                 usleep(mt_rand(200000, 2000000));
             }
         } else {
-            if (!\app\library\DB::getInstance()->ignoreLevel(2)->insert('__tablepre__ratelimit', $param)) {
+            if (!\app\library\DB::getInstance()->ignoreLevel(2)->table('__tablepre__ratelimit')->insert($param)) {
                 usleep(mt_rand(200000, 2000000));
             }
         }

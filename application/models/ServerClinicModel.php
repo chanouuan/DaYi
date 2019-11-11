@@ -212,20 +212,22 @@ class ServerClinicModel extends Crud {
     public function searchDrug ($post)
     {
         $post['clinic_id'] = intval($post['clinic_id']);
-        $post['name']     = trim_space($post['name']);
+        $post['name']      = trim_space($post['name']);
         if (!$post['clinic_id'] || !$post['name']) {
             return success([]);
         }
-        $drugType = $post['drug_type'] == DrugType::WESTERN ? [DrugType::WESTERN, DrugType::NEUTRAL] : intval($post['drug_type']);
-        if (!$list = (new DrugModel())->search($post['clinic_id'], $drugType, $post['name'])) {
+        $post['drug_type'] = $post['drug_type'] == DrugType::WESTERN ? [DrugType::WESTERN, DrugType::NEUTRAL] : intval($post['drug_type']);
+        if (!$list = (new DrugModel())->search($post)) {
             return success([]);
         }
         return success([
             'columns' => [
                 ['key' => 'name', 'value' => '名称'],
                 ['key' => 'package_spec', 'value' => '规格'],
-                ['key' => 'price', 'value' => '价格'],
-                ['key' => 'reserve', 'value' => '库存']
+                ['key' => 'price', 'value' => '零售价'],
+                ['key' => 'dispense_unit', 'value' => '单位'],
+                ['key' => 'amount', 'value' => '库存'],
+                ['key' => 'manufactor_name', 'value' => '生产商']
             ],
             'rows' => $list
         ]);

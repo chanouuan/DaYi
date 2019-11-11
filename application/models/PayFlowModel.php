@@ -13,13 +13,15 @@ class PayFlowModel extends Crud {
     /**
      * 获取订单流水
      * @param $flow_type 操作类型
+     * @param $clinic_id 诊所id
      * @param $order_id 订单id
      * @return array
      */
-    public function getOrders ($flow_type, $order_id)
+    public function getOrders ($flow_type, $clinic_id, $order_id)
     {
         $condition = [
-            'order_id' => $order_id
+            'clinic_id' => $clinic_id,
+            'order_id'  => $order_id
         ];
         if (OrderPayFlow::format($flow_type)) {
             $condition['flow_type'] = $flow_type;
@@ -35,6 +37,7 @@ class PayFlowModel extends Crud {
     /**
      * 添加资金流水
      * @param $flow_type 操作类型
+     * @param $clinic_id 诊所id
      * @param $order_id 订单id
      * @param $payway 付款方式
      * @param $money 付款金额/退款金额
@@ -43,7 +46,7 @@ class PayFlowModel extends Crud {
      * @param $remark 备注
      * @return bool
      */
-    public function insert ($flow_type, $order_id, $payway, $money, $second_payway = null, $second_money = null, $remark = null)
+    public function insert ($flow_type, $clinic_id, $order_id, $payway, $money, $second_payway = null, $second_money = null, $remark = null)
     {
         if ($flow_type == OrderPayFlow::REFUND) {
             $second_payway = null;
@@ -51,6 +54,7 @@ class PayFlowModel extends Crud {
         }
 
         $data = [
+            'clinic_id'   => $clinic_id,
             'order_id'    => $order_id,
             'flow_type'   => $flow_type,
             'payway'      => $payway,
@@ -60,6 +64,7 @@ class PayFlowModel extends Crud {
         ];
         if (OrderPayWay::isLocalPayWay($second_payway)) {
             $data = [
+                'clinic_id'   => [$clinic_id, $clinic_id],
                 'order_id'    => [$order_id, $order_id],
                 'flow_type'   => [$flow_type, $flow_type],
                 'payway'      => [$payway, $second_payway],
@@ -69,7 +74,7 @@ class PayFlowModel extends Crud {
             ];
         }
 
-        return $this->getDb()->insert($this->table, $data);
+        return $this->getDb()->insert($data);
     }
 
 }

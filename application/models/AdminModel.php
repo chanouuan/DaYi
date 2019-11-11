@@ -16,7 +16,7 @@ class AdminModel extends Crud {
      * @param password 密码登录
      * @return array
      */
-    public function login ($post)
+    public function login (array $post)
     {
         $post['username'] = trim_space($post['username']);
         if (!$post['username']) {
@@ -87,7 +87,7 @@ class AdminModel extends Crud {
      * @param $post
      * @return array
      */
-    public function userLogin ($post)
+    public function userLogin (array $post)
     {
         $condition = [
             'status' => 1,
@@ -105,7 +105,7 @@ class AdminModel extends Crud {
         $userModel = new UserModel();
 
         // 获取用户
-        if (!$userInfo = $this->getDb()->table($this->table)->field('id,avatar,user_name,full_name,telephone,password')->where($condition)->limit(1)->find()) {
+        if (!$userInfo = $this->find($condition, 'id,avatar,user_name,full_name,telephone,password')) {
             return error('用户名或密码错误');
         }
 
@@ -135,10 +135,10 @@ class AdminModel extends Crud {
         if (!$user_id) {
             return [];
         }
-        if (!$adminInfo = $this->getDb()->table($this->table)->field('id,clinic_id,avatar,user_name,full_name,telephone,status')->where(['id' => $user_id])->limit(1)->find()) {
+        if (!$adminInfo = $this->find(['id' => $user_id], 'id,clinic_id,avatar,user_name,full_name,telephone,status')) {
             return [];
         }
-        $adminInfo['avatar'] = httpurl($adminInfo['avatar']);
+        $adminInfo['avatar']   = httpurl($adminInfo['avatar']);
         $adminInfo['nickname'] = get_real_val($adminInfo['full_name'], $adminInfo['user_name'], $adminInfo['telephone']);
         return $adminInfo;
     }
@@ -184,7 +184,7 @@ class AdminModel extends Crud {
     public function getEmployeeInfo ($id)
     {
         $id = intval($id);
-        if (!$info = $this->getDb()->table($this->table)->field('id,avatar,user_name,full_name,telephone,gender,title,status')->where(['id' => $id])->limit(1)->find()) {
+        if (!$info = $this->getDb()->field('id,avatar,user_name,full_name,telephone,gender,title,status')->where(['id' => $id])->limit(1)->find()) {
             return [];
         }
         // 获取角色
@@ -233,7 +233,7 @@ class AdminModel extends Crud {
             }
         }
 
-        $count = $this->getDb()->table($this->table)->where($condition)->count();
+        $count = $this->count($condition);
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             $list = $this->select($condition, 'id,user_name,telephone,full_name,gender,title,status', 'id desc', $pagesize['limitstr']);
@@ -265,7 +265,7 @@ class AdminModel extends Crud {
         if (!$id) {
             return [];
         }
-        if (!$admins = $this->getDb()->table($this->table)->field('id,user_name,full_name,telephone')->where(['id' => ['in', $id]])->select()) {
+        if (!$admins = $this->select(['id' => ['in', $id]], 'id,user_name,full_name,telephone')) {
             return [];
         }
         foreach ($admins as $k => $v) {
@@ -369,7 +369,6 @@ class AdminModel extends Crud {
             $condition['title'] = is_array($title) ? ['in', $title] : $title;
         }
         $userList = $this->getDb()
-            ->table($this->table)
             ->field('id,user_name,full_name,telephone')
             ->where($condition)
             ->select();
@@ -386,7 +385,7 @@ class AdminModel extends Crud {
      * 添加员工
      * @return array
      */
-    public function saveEmployee ($user_id, $post)
+    public function saveEmployee ($user_id, array $post)
     {
         $userInfo = $this->checkAdminInfo($user_id);
         if ($userInfo['errorcode'] !== 0) {
@@ -445,7 +444,7 @@ class AdminModel extends Crud {
         if ($post['id']) {
              $condition['id'] = ['<>', $post['id']];
         }
-        if ($this->getDb()->table($this->table)->where($condition)->count()) {
+        if ($this->count($condition)) {
             return error('该登录账号已存在');
         }
         if ($data['telephone']) {
@@ -456,7 +455,7 @@ class AdminModel extends Crud {
             if ($post['id']) {
                  $condition['id'] = ['<>', $post['id']];
             }
-            if ($this->getDb()->table($this->table)->where($condition)->count()) {
+            if ($this->count($condition)) {
                 return error('该手机号已存在');
             }
         }
@@ -473,12 +472,12 @@ class AdminModel extends Crud {
                 $data['status'] = $post['status'];
             }
             $data['update_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-            if (!$this->getDb()->update($this->table, $data, ['id' => $post['id'], 'clinic_id' => $post['clinic_id']])) {
+            if (!$this->getDb()->where(['id' => $post['id'], 'clinic_id' => $data['clinic_id']])->update($data)) {
                 return error('该用户已存在！');
             }
         } else {
             $data['create_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-            if (!$post['id'] = $this->getDb()->insert($this->table, $data, null, null, true)) {
+            if (!$post['id'] = $this->getDb()->insert($data, false, true)) {
                 return error('请勿添加重复的用户！');
             }
         }
@@ -488,49 +487,18 @@ class AdminModel extends Crud {
         $roles = $roles ? array_column($roles, 'role_id') :[];
         $curd  = array_curd($roles, $post['role_id']);
         if ($curd['add']) {
-            $this->getDb()->insert('admin_role_user', [
+            $this->getDb()->table('admin_role_user')->insert([
                 'user_id' => array_fill(0, count($curd['add']), $post['id']),
                 'role_id' => $curd['add']
             ]);
         }
         if ($curd['delete']) {
-            $this->getDb()->delete('admin_role_user', [
+            $this->getDb()->table('admin_role_user')->where([
                 'user_id' => $post['id'],
                 'role_id' => ['in', $curd['delete']]
-            ]);
+            ])->delete();
         }
         
-        return success('ok');
-    }
-
-    /**
-     * 删除员工
-     * @return array
-     */
-    public function delEmployee ($clinic_id, $id)
-    {
-        $id = intval($id);
-        if (!$id) {
-            return error('账号不能为空');
-        }
-
-        if (!$this->getDb()->transaction(function ($db) use($clinic_id, $id) {
-            if (!$db->delete($this->table, ['id' => $id, 'clinic_id' => $clinic_id])) {
-                return false;
-            }
-            // 删除角色
-            if (false === $db->delete('admin_role_user', ['user_id' => $id])) {
-                return false;
-            }
-            // 删除科室
-            if (false === $db->delete('dayi_department_doctor', ['doctor_id' => $id])) {
-                return false;
-            }
-            return true;
-        })) {
-            return error('删除失败');
-        }
-
         return success('ok');
     }
 
@@ -550,16 +518,21 @@ class AdminModel extends Crud {
         $count = 1;
         if ($faileInfo) {
             $count = ($faileInfo['update_time'] + 900 > TIMESTAMP) ? $faileInfo['login_count'] + 1 : 1;
-            $this->getDb()->update('admin_failedlogin', [
-                'login_count' => $count,
-                'update_time' => TIMESTAMP
-            ], ['id' => $faileInfo['id'], 'update_time' => $faileInfo['update_time']]);
+            $this->getDb()
+                ->table('admin_failedlogin')
+                ->where(['id' => $faileInfo['id'], 'update_time' => $faileInfo['update_time']])
+                ->update([
+                    'login_count' => $count,
+                    'update_time' => TIMESTAMP
+                ]);
         } else {
-            $this->getDb()->insert('admin_failedlogin', [
-                'login_count' => 1,
-                'update_time' => TIMESTAMP,
-                'account' => $account
-            ]);
+            $this->getDb()
+                ->table('admin_failedlogin')
+                ->insert([
+                    'login_count' => 1,
+                    'update_time' => TIMESTAMP,
+                    'account'     => $account
+                ]);
         }
         $count = 10 - $count;
         return $count < 0 ? 0 : $count;

@@ -14,11 +14,30 @@ use app\common\OrderPayFlow;
 use app\common\OrderPayWay;
 use app\common\OrderSource;
 use app\common\OrderStatus;
+use app\common\GenerateCache;
 use Crud;
 
 class DoctorOrderModel extends Crud {
 
-    protected $table = 'dayi_doctor_order';
+    protected $table    = 'dayi_order';
+    protected $userInfo = null;
+
+    public function __construct ($user_id = null, $clinic_id = null)
+    {
+        // 分区
+        if ($user_id) {
+            $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+            if ($userInfo['errorcode'] !== 0) {
+                json(null, $userInfo['message'], $userInfo['errorcode']);
+            }
+            $this->userInfo = $userInfo['result'];
+            $clinic_id = $this->userInfo['clinic_id'];
+        }
+        if (empty($clinic_id)) {
+            json(null, '参数错误', -1);
+        }
+        list($this->link, $this->partition) = GenerateCache::getClinicPartition($clinic_id);
+    }
 
     /**
      * 录音回调
@@ -34,7 +53,7 @@ class DoctorOrderModel extends Crud {
             return error('参数错误');
         }
 
-        if (!$this->getDb()->update($this->table, ['voice' => $url], ['id' => $order_id, 'voice' => null])) {
+        if (!$this->getDb()->where(['id' => $order_id, 'voice' => null])->update(['voice' => $url])) {
             return error('已保存');
         }
         return success('ok');
@@ -67,7 +86,7 @@ class DoctorOrderModel extends Crud {
      * 解析打印模板
      * @return string
      */
-    protected function parsePrintTemplete ($type, $data)
+    protected function parsePrintTemplete ($type, array $data)
     {
         $filePath = APPLICATION_PATH . '/public/static/print_templete/' . intval($type) . '.html';
         if (!file_exists($filePath)) {
@@ -84,18 +103,12 @@ class DoctorOrderModel extends Crud {
      * 购药
      * @return array
      */
-    public function buyDrug ($user_id, $post)
+    public function buyDrug (array $post)
     {
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
         // 验证会诊单
         $post['advanced'] = true;
         $post['patient_name_safe'] = true; // 患者姓名不必填
+        $post['clinic_id'] = $this->userInfo['clinic_id'];
         $post = $this->validationDoctorCard($post);
         if ($post['errorcode'] !== 0) {
             return $post;
@@ -103,39 +116,33 @@ class DoctorOrderModel extends Crud {
         $post = $post['result'];
 
         // 生成会诊单
-        if (!$orderId = $this->getDb()->transaction(function ($db) use($post, $userInfo) {
+        if (!$orderId = $this->getDb()->transaction(function ($db) use($post) {
             // 新增订单
-            if (!$orderId = $db->insert($this->table, [
-                'clinic_id'         => $userInfo['clinic_id'],
-                'enum_source'       => OrderSource::BUY_DRUG,
-                'patient_id'        => $post['patient_id'],
-                'patient_name'      => $post['patient_name'],
-                'patient_tel'       => $post['patient_tel'],
-                'patient_gender'    => $post['patient_gender'],
-                'patient_age'       => $post['patient_age'],
-                'pay'               => $post['total_money'],
-                'update_time'       => date('Y-m-d H:i:s', TIMESTAMP),
-                'create_time'       => date('Y-m-d H:i:s', TIMESTAMP)
-            ], null, null, true)) {
+            if (!$orderId = $db->insert([
+                'clinic_id'      => $this->userInfo['clinic_id'],
+                'enum_source'    => OrderSource::BUY_DRUG,
+                'patient_id'     => $post['patient_id'],
+                'patient_name'   => $post['patient_name'],
+                'patient_tel'    => $post['patient_tel'],
+                'patient_gender' => $post['patient_gender'],
+                'patient_age'    => $post['patient_age'],
+                'pay'            => $post['total_money'],
+                'update_time'    => date('Y-m-d H:i:s', TIMESTAMP),
+                'create_time'    => date('Y-m-d H:i:s', TIMESTAMP)
+            ], null, true)) {
                 return false;
             }
             // 新增处方笺
             foreach ($post['notes'] as $k => $v) {
-                $post['notes'][$k]['order_id'] = $orderId;
+                $post['notes'][$k]['clinic_id'] = $this->userInfo['clinic_id'];
+                $post['notes'][$k]['order_id']  = $orderId;
             }
-            if (!$db->insert('dayi_doctor_order_notes', $post['notes'])) {
+            if (!$db->partition($this->partition)->table('dayi_order_notes')->insert($post['notes'])) {
                 return false;
-            }
-            // 减库存
-            $list = $this->totalAmount($post['notes']);
-            foreach ($list as $k => $v) {
-                if (!$db->update('dayi_drug', ['amount' => ['amount-' . $v]], ['id' => $k])) {
-                    return false;
-                }
             }
             return $orderId;
         })) {
-            return error('库存不足，不能保存订单');
+            return error('保存订单失败');
         }
 
         unset($post);
@@ -148,7 +155,7 @@ class DoctorOrderModel extends Crud {
      * 线下收费
      * @return array
      */
-    public function localCharge ($user_id, $post)
+    public function localCharge (array $post)
     {
         $post['order_id']      = intval($post['order_id']);
         $post['payway']        = OrderPayWay::isLocalPayWay($post['payway']) ? $post['payway'] : null;
@@ -164,15 +171,8 @@ class DoctorOrderModel extends Crud {
             return error('请填写至少一种付款方式');
         }
 
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
         // 获取订单总金额
-        if (!$orderInfo = $this->find(['id' => $post['order_id'], 'clinic_id' => $userInfo['clinic_id'], 'status' => OrderStatus::NOPAY], 'pay')) {
+        if (!$orderInfo = $this->find(['id' => $post['order_id'], 'clinic_id' => $this->userInfo['clinic_id'], 'status' => OrderStatus::NOPAY], 'pay')) {
             return error('本次会诊已结束');
         }
 
@@ -184,24 +184,32 @@ class DoctorOrderModel extends Crud {
             return error('付款金额验证失败');
         }
 
-        // 更新订单已收费
-        if (!$this->getDb()->update($this->table, [
-            'pay'            => $discount,
-            'discount'       => $orderInfo['pay'] - $discount,
-            'charge_user_id' => $user_id,
-            'print_code'     => null,
-            'payway'         => $post['second_payway'] ? OrderPayWay::MULTIPAY : $post['payway'],
-            'status'         => OrderStatus::PAY,
-            'update_time'    => date('Y-m-d H:i:s', TIMESTAMP)
-        ], [
-            'id'     => $post['order_id'],
-            'status' => OrderStatus::NOPAY
-        ])) {
+        // 获取处方笺
+        if (false === ($notes = $this->getDb()->table('dayi_order_notes')->where(['order_id' => $post['order_id']])->field('id,category,relation_id,total_amount,dose')->select())) {
+            return error('数据异常，请重新操作');
+        }
+
+        if (!$this->getDb()->transaction(function ($db) use($orderInfo, $discount, $notes, $post) {
+            // 更新订单已收费
+            if (!$db->where(['id' => $post['order_id'], 'status' => OrderStatus::NOPAY])->update([
+                'pay'            => $discount,
+                'discount'       => $orderInfo['pay'] - $discount,
+                'charge_user_id' => $this->userInfo['id'],
+                'print_code'     => null,
+                'payway'         => $post['second_payway'] ? OrderPayWay::MULTIPAY : $post['payway'],
+                'status'         => OrderStatus::PAY,
+                'update_time'    => date('Y-m-d H:i:s', TIMESTAMP)
+            ])) {
+                return false;
+            }
+            // 减库存
+            return (new DrugModel())->updateAmount($this->userInfo['clinic_id'], '-', $this->totalAmount($notes));
+        })) {
             return error('保存订单失败');
         }
 
         // 添加资金流水
-        (new PayFlowModel())->insert(OrderPayFlow::CHARGE, $post['order_id'], $post['payway'], $post['money'], $post['second_payway'], $post['second_money'], $post['remark']);
+        (new PayFlowModel(['link' => $this->link, 'partition' => $this->partition]))->insert(OrderPayFlow::CHARGE, $this->userInfo['clinic_id'], $post['order_id'], $post['payway'], $post['money'], $post['second_payway'], $post['second_money'], $post['remark']);
 
         return success('ok');
     }
@@ -210,7 +218,7 @@ class DoctorOrderModel extends Crud {
      * 联诊
      * @return array
      */
-    public function unionConsultation ($user_id, $print_code)
+    public function unionConsultation ($print_code)
     {
         $print_code = intval($print_code);
 
@@ -218,14 +226,7 @@ class DoctorOrderModel extends Crud {
             return error('请填写取号号码');
         }
 
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
-        if (!$orderInfo = $this->find(['clinic_id' => $userInfo['clinic_id'], 'print_code' => $print_code, 'status' => OrderStatus::NOPAY], 'id')) {
+        if (!$orderInfo = $this->find(['clinic_id' => $this->userInfo['clinic_id'], 'print_code' => $print_code, 'status' => OrderStatus::NOPAY], 'id')) {
             return error('本次会诊已结束');
         }
 
@@ -240,7 +241,7 @@ class DoctorOrderModel extends Crud {
     {
         $order_id = intval($order_id);
 
-        if (!$orderInfo = $this->find(['id' => $order_id], 'id,doctor_id,enum_source,print_code,patient_name,patient_tel,patient_gender,patient_age,patient_complaint,patient_allergies,patient_diagnosis,note_dose,note_side,advice,voice,pay,discount,payway,status,create_time')) {
+        if (!$orderInfo = $this->find(['id' => $order_id, 'clinic_id' => $this->userInfo['clinic_id']], 'id,doctor_id,enum_source,print_code,patient_name,patient_tel,patient_gender,patient_age,patient_complaint,patient_allergies,patient_diagnosis,note_dose,note_side,advice,voice,pay,discount,payway,status,create_time')) {
             return error('订单不存在');
         }
 
@@ -250,7 +251,7 @@ class DoctorOrderModel extends Crud {
         // 支付方式
         if ($orderInfo['payway'] == OrderPayWay::MULTIPAY) {
             // 多种支付
-            $orderInfo['payway'] = (new PayFlowModel())->getOrders(OrderPayFlow::CHARGE, $order_id);
+            $orderInfo['payway'] = (new PayFlowModel(['link' => $this->link, 'partition' => $this->partition]))->getOrders(OrderPayFlow::CHARGE, $this->userInfo['clinic_id'], $order_id);
         } else {
             // 单种支付
             $orderInfo['payway'] = [[
@@ -266,14 +267,14 @@ class DoctorOrderModel extends Crud {
         // 获取处方笺
         $orderInfo['notes'] = [];
         if ($orderInfo['patient_name'] || $orderInfo['enum_source'] == OrderSource::BUY_DRUG) {
-            $orderInfo['notes'] = $this->getDb()->table('dayi_doctor_order_notes')->where(['order_id' => $order_id])->field('id,category,relation_id,name,package_spec,dispense_unit,dosage_unit,single_amount,total_amount,usages,frequency,drug_days,dose,remark,price')->order('id')->select();
+            $orderInfo['notes'] = $this->getDb()->table('dayi_order_notes')->where(['order_id' => $order_id])->field('id,category,relation_id,name,package_spec,dispense_unit,dosage_unit,single_amount,total_amount,usages,frequency,drug_days,dose,remark,price')->order('id')->select();
             foreach ($orderInfo['notes'] as $k => $v) {
                 $orderInfo['notes'][$k]['price'] = round_dollar($v['price']);
-                if (NoteCategory::isDrug($v['category'])) {
+                if (NoteUsage::format($v['usages'])) {
                     $orderInfo['notes'][$k]['usages_name'] = NoteUsage::getMessage($v['usages']);
-                    if ($v['category'] == NoteCategory::WESTERN) {
-                        $orderInfo['notes'][$k]['frequency_name'] = NoteFrequency::getMessage($v['frequency']);
-                    }
+                }
+                if (NoteFrequency::format($v['category'])) {
+                    $orderInfo['notes'][$k]['frequency_name'] = NoteFrequency::getMessage($v['frequency']);
                 }
             }
         }
@@ -285,7 +286,7 @@ class DoctorOrderModel extends Crud {
      * 获取会诊单列表
      * @return array
      */
-    public function getDoctorOrderList ($user_id, array $post)
+    public function getDoctorOrderList (array $post)
     {
         $post['page_size']    = max(6, $post['page_size']);
         $post['print_code']   = trim_space($post['print_code']);
@@ -293,16 +294,9 @@ class DoctorOrderModel extends Crud {
         $post['patient_name'] = trim_space($post['patient_name']);
 
         // 条件查询
-        $condition = [];
-
-        // 用户获取
-        $adminModel = new AdminModel();
-        $userInfo = $adminModel->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-        $condition['clinic_id'] = $userInfo['clinic_id'];
+        $condition = [
+            'clinic_id' => $this->userInfo['clinic_id']
+        ];
 
         // 搜索时间
         $post['start_time'] = strtotime($post['start_time']);
@@ -336,7 +330,7 @@ class DoctorOrderModel extends Crud {
             } else {
                 $conditionForDoctor['user_name'] = $post['doctor_name'];
             }
-            if (!$doctor = $adminModel->find($conditionForDoctor, 'id')) {
+            if (!$doctor = (new AdminModel())->find($conditionForDoctor, 'id')) {
                 return success([
                     'total_count' => 0,
                     'page_size' => $post['page_size'],
@@ -356,11 +350,11 @@ class DoctorOrderModel extends Crud {
             $condition['print_code'] = $post['print_code'];
         }
 
-        $count = $this->getDb()->table($this->table)->where($condition)->count();
+        $count = $this->count($condition);
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             $list = $this->select($condition, 'id,enum_source,doctor_id,patient_name,patient_gender,patient_age,patient_tel,pay,discount,payway,create_time,status', 'id desc', $pagesize['limitstr']);
-            $userNames = $adminModel->getAdminNames(array_column($list, 'doctor_id'));
+            $userNames = (new AdminModel())->getAdminNames(array_column($list, 'doctor_id'));
             foreach ($list as $k => $v) {
                 $list[$k]['source']      = OrderSource::getMessage($v['enum_source']);
                 $list[$k]['patient_age'] = Gender::showAge($v['patient_age']);
@@ -381,7 +375,7 @@ class DoctorOrderModel extends Crud {
      * 获取今日会诊
      * @return array
      */
-    public function getTodayOrderList ($user_id, array $post)
+    public function getTodayOrderList (array $post)
     {
         // 搜索时间
         $post['start_time'] = strtotime($post['start_time']);
@@ -405,7 +399,7 @@ class DoctorOrderModel extends Crud {
 
         // 条件查询
         $condition = [
-            'doctor_id'   => $user_id,
+            'doctor_id'   => $this->userInfo['id'],
             'enum_source' => OrderSource::DOCTOR,
             'create_time' => ['between', [$post['start_time'], $post['end_time']]]
         ];
@@ -413,7 +407,7 @@ class DoctorOrderModel extends Crud {
             $condition['status'] = $post['status'];
         }
 
-        $count = $this->getDb()->table($this->table)->where($condition)->count();
+        $count = $this->count($condition);
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, 5);
             $list = $this->select($condition, 'id,patient_name,patient_gender,create_time,status', 'id desc', $pagesize['limitstr']);
@@ -433,35 +427,29 @@ class DoctorOrderModel extends Crud {
      * 编辑保存会诊单
      * @return array
      */
-    public function saveDoctorCard ($user_id, $post)
+    public function saveDoctorCard (array $post)
     {
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
         // 验证会诊单
         $post['advanced'] = true;
+        $post['clinic_id'] = $this->userInfo['clinic_id'];
         $post = $this->validationDoctorCard($post);
         if ($post['errorcode'] !== 0) {
             return $post;
         }
         $post = $post['result'];
 
-        if (!$orderInfo = $this->find(['id' => $post['order_id'], 'clinic_id' => $userInfo['clinic_id'], 'status' => OrderStatus::NOPAY], 'update_time')) {
+        if (!$this->count(['id' => $post['order_id'], 'clinic_id' => $this->userInfo['clinic_id'], 'status' => OrderStatus::NOPAY])) {
             return error('订单不存在');
         }
 
         // 获取处方笺
-        if (false === ($notes = $this->getDb()->table('dayi_doctor_order_notes')->where(['order_id' => $post['order_id']])->field('id,category,relation_id,total_amount,dose')->select())) {
+        if (false === ($notes = $this->getDb()->table('dayi_order_notes')->where(['order_id' => $post['order_id']])->field('id')->select())) {
             return error('数据异常，请重新操作');
         }
 
-        // 编辑会诊单
-        if (!$this->getDb()->transaction(function ($db) use($post, $notes, $orderInfo) {
-            if (!$db->update($this->table, [
+        if (!$this->getDb()->transaction(function ($db) use($post, $notes) {
+            // 编辑会诊单
+            if (!$db->where(['id' => $post['order_id'], 'status' => OrderStatus::NOPAY])->update([
                 'patient_id'        => $post['patient_id'],
                 'patient_name'      => $post['patient_name'],
                 'patient_tel'       => $post['patient_tel'],
@@ -473,44 +461,24 @@ class DoctorOrderModel extends Crud {
                 'note_side'         => $post['note_side'],
                 'advice'            => $post['advice'],
                 'pay'               => $post['total_money'],
-                'update_time'       => date('Y-m-d H:i:s', TIMESTAMP + 1)
-            ], [
-                'id'          => $post['order_id'],
-                'status'      => OrderStatus::NOPAY,
-                'update_time' => $orderInfo['update_time']
+                'update_time'       => date('Y-m-d H:i:s', TIMESTAMP)
             ])) {
                 return false;
             }
             // 删除之前处方笺
             if ($notes) {
-                if (!$db->delete('dayi_doctor_order_notes', ['id' => ['in', array_column($notes, 'id')]])) {
+                if (!$db->partition($this->partition)->table('dayi_order_notes')->where(['id' => ['in', array_column($notes, 'id')]])->delete()) {
                     return false;
-                }
-                // 加库存
-                $list = $this->totalAmount($notes);
-                foreach ($list as $k => $v) {
-                    if (!$db->update('dayi_drug', ['amount' => ['amount+' . $v]], ['id' => $k])) {
-                        return false;
-                    }
                 }
             }
             // 新增处方笺
             foreach ($post['notes'] as $k => $v) {
-                $post['notes'][$k]['order_id'] = $post['order_id'];
+                $post['notes'][$k]['clinic_id'] = $this->userInfo['clinic_id'];
+                $post['notes'][$k]['order_id']  = $post['order_id'];
             }
-            if (!$db->insert('dayi_doctor_order_notes', $post['notes'])) {
-                return false;
-            }
-            // 减库存
-            $list = $this->totalAmount($post['notes']);
-            foreach ($list as $k => $v) {
-                if (!$db->update('dayi_drug', ['amount' => ['amount-' . $v]], ['id' => $k])) {
-                    return false;
-                }
-            }
-            return true;
+            return $db->partition($this->partition)->table('dayi_order_notes')->insert($post['notes']);
         })) {
-            return error('库存不足，不能保存订单');
+            return error('保存订单失败');
         }
 
         unset($post);
@@ -521,16 +489,10 @@ class DoctorOrderModel extends Crud {
      * 创建会诊单
      * @return array
      */
-    public function createDoctorCard ($user_id, array $post)
+    public function createDoctorCard (array $post)
     {
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
         // 验证会诊单
+        $post['clinic_id'] = $this->userInfo['clinic_id'];
         $post = $this->validationDoctorCard($post);
         if ($post['errorcode'] !== 0) {
             return $post;
@@ -539,15 +501,15 @@ class DoctorOrderModel extends Crud {
 
         // 生成取号号码
         if (!$post['advanced']) {
-            $printCode = $this->buildPrintCode($userInfo['clinic_id']);
+            $printCode = $this->buildPrintCode($this->userInfo['clinic_id']);
         }
 
         // 生成会诊单
-        if (!$orderId = $this->getDb()->transaction(function ($db) use($post, $userInfo, $printCode) {
+        if (!$orderId = $this->getDb()->transaction(function ($db) use($post, $printCode) {
             // 新增订单
-            if (!$orderId = $db->insert($this->table, [
-                'clinic_id'         => $userInfo['clinic_id'],
-                'doctor_id'         => $post['doctor_id'] ? $post['doctor_id'] : $userInfo['id'],
+            if (!$orderId = $db->insert([
+                'clinic_id'         => $this->userInfo['clinic_id'],
+                'doctor_id'         => $post['doctor_id'] ? $post['doctor_id'] : $this->userInfo['id'],
                 'enum_source'       => OrderSource::DOCTOR,
                 'print_code'        => $printCode,
                 'patient_id'        => $post['patient_id'],
@@ -564,7 +526,7 @@ class DoctorOrderModel extends Crud {
                 'pay'               => $post['total_money'],
                 'update_time'       => date('Y-m-d H:i:s', TIMESTAMP),
                 'create_time'       => date('Y-m-d H:i:s', TIMESTAMP)
-            ], null, null, true)) {
+            ], null, true)) {
                 return false;
             }
             if (empty($post['notes'])) {
@@ -572,21 +534,15 @@ class DoctorOrderModel extends Crud {
             }
             // 新增处方笺
             foreach ($post['notes'] as $k => $v) {
-                $post['notes'][$k]['order_id'] = $orderId;
+                $post['notes'][$k]['clinic_id'] = $this->userInfo['clinic_id'];
+                $post['notes'][$k]['order_id']  = $orderId;
             }
-            if (!$db->insert('dayi_doctor_order_notes', $post['notes'])) {
+            if (!$db->partition($this->partition)->table('dayi_order_notes')->insert($post['notes'])) {
                 return false;
-            }
-            // 减库存
-            $list = $this->totalAmount($post['notes']);
-            foreach ($list as $k => $v) {
-                if (!$db->update('dayi_drug', ['amount' => ['amount-' . $v]], ['id' => $k])) {
-                    return false;
-                }
             }
             return $orderId;
         })) {
-            return error('库存不足，不能保存订单');
+            return error('保存订单失败');
         }
 
         unset($post);
@@ -651,14 +607,12 @@ class DoctorOrderModel extends Crud {
         }
 
         // 处方笺
-        if (!$post['notes'] = $this->arrangeNotes($post['notes'], $post['note_dose'])) {
+        if (!$post['notes'] = $this->arrangeNotes($post['clinic_id'], $post['notes'], $post['note_dose'])) {
             return error('药品库存不足');
         }
 
         // 计算总金额
-        if (!$post['total_money'] = $this->totalMoney($post['notes'])) {
-            return error('订单金额异常');
-        }
+        $post['total_money'] = $this->totalMoney($post['notes']);
 
         return success($post);
     }
@@ -672,7 +626,7 @@ class DoctorOrderModel extends Crud {
     {
         $code = (rand() % 10) . (rand() % 10) . (rand() % 10) . (rand() % 10);
         // 检查重复
-        if ($this->getDb()->table($this->table)->where(['clinic_id' => $clinic_id, 'print_code' => intval($code), 'status' => OrderStatus::NOPAY])->count()) {
+        if ($this->getDb()->where(['clinic_id' => $clinic_id, 'print_code' => intval($code), 'status' => OrderStatus::NOPAY])->count()) {
             return $this->buildPrintCode($clinic_id);
         }
         return $code;
@@ -707,11 +661,14 @@ class DoctorOrderModel extends Crud {
         foreach ($notes as $k => $v) {
             if (NoteCategory::isDrug($v['category'])) {
                 // 药品
+                if (!isset($list[$v['relation_id']])) {
+                    $list[$v['relation_id']] = [];
+                }
                 if ($v['category'] == NoteCategory::CHINESE) {
                     // 草药剂量
-                    $list[$v['relation_id']] += ($v['total_amount'] * $v['dose']);
+                    $list[$v['relation_id']]['amount'] += ($v['total_amount'] * $v['dose']);
                 } else {
-                    $list[$v['relation_id']] += $v['total_amount'];
+                    $list[$v['relation_id']]['amount'] += $v['total_amount'];
                 }
             }
         }
@@ -720,15 +677,13 @@ class DoctorOrderModel extends Crud {
 
     /**
      * 整理处方笺
+     * @param $clinic_id
      * @param $notes
      * @param $dose 草药计量
      * @return array
      */
-    protected function arrangeNotes (array $notes, &$dose)
+    protected function arrangeNotes ($clinic_id, array $notes, &$dose)
     {
-        $drugModel      = new DrugModel();
-        $treatmentModel = new TreatmentModel();
-
         foreach ($notes as $k => $v) {
             $notes[$k]['relation_id']   = intval($v['relation_id']);
             $notes[$k]['total_amount']  = max(0, intval($v['total_amount']));
@@ -746,39 +701,40 @@ class DoctorOrderModel extends Crud {
         foreach ($notes as $k => $v) {
             if (NoteCategory::isDrug($v['category'])) {
                 // 药品
+                if (!isset($list[1][$v['relation_id']])) {
+                    $list[1][$v['relation_id']] = [];
+                }
                 if ($v['category'] == NoteCategory::CHINESE) {
                     // 草药剂量
                     $lookChineseDrug = true;
                     $dose = region_number($dose, 1, 1, 1000, 1000);
-                    $list[1][$v['relation_id']] += ($v['total_amount'] * $dose);
+                    $list[1][$v['relation_id']]['amount'] += ($v['total_amount'] * $dose);
                 } else {
-                    $list[1][$v['relation_id']] += $v['total_amount'];
+                    $list[1][$v['relation_id']]['amount'] += $v['total_amount'];
                 }
             } else {
                 // 诊疗
-                $list[2][$v['relation_id']] = [];
+                $list[2][$v['relation_id']] = $v['relation_id'];
             }
         }
         if (!$lookChineseDrug) {
             $dose = 0;
         }
 
+        $drugModel      = new DrugModel();
+        $treatmentModel = new TreatmentModel();
+
         // 获取药品
         if (isset($list[1])) {
-            foreach ($list[1] as $k => $v) {
-                // 检查库存
-                if (!$list[1][$k] = $drugModel->find(['id' => $k, 'status' => CommonStatus::OK, 'amount' => ['>=' . $v]], 'name,package_spec,dispense_unit,dosage_unit,retail_price')) {
-                    return false;
-                }
+            if (!$list[1] = $drugModel->validationAmount($clinic_id, $list[1])) {
+                return false;
             }
         }
 
         // 获取诊疗
         if (isset($list[2])) {
-            foreach ($list[2] as $k => $v) {
-                if (!$list[2][$k] = $treatmentModel->find(['id' => $k, 'status' => CommonStatus::OK], 'name,unit,price')) {
-                    return false;
-                }
+            if (!$list[2] = $treatmentModel->diffTreatment($list[2])) {
+                return false;
             }
         }
 
@@ -825,7 +781,7 @@ class DoctorOrderModel extends Crud {
             }
         }
 
-        unset($drugModel, $notes, $list);
+        unset($drugModel, $treatmentModel, $notes, $list);
         return $result;
     }
 

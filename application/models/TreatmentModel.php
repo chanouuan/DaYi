@@ -11,7 +11,23 @@ class TreatmentModel extends Crud {
     protected $table = 'dayi_treatment_sheet';
 
     /**
-     * 添加药品
+     * 验证诊疗项目
+     * @return bool
+     */
+    public function diffTreatment (array $id)
+    {
+        if (empty($id)) {
+            return false;
+        }
+        $list = $this->select(['id' => ['in', $id], 'status' => CommonStatus::OK], 'id,name,unit,price');
+        if (count($list) != count($id)) {
+            return false;
+        }
+        return array_column($list, null, 'id');
+    }
+
+    /**
+     * 添加诊疗项目
      * @return array
      */
     public function saveTreatment ($user_id, $post)
@@ -59,12 +75,12 @@ class TreatmentModel extends Crud {
                 $data['status'] = $post['status'];
             }
             $data['update_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-            if (!$this->getDb()->update($this->table, $data, ['id' => $post['id'], 'clinic_id' => $post['clinic_id']])) {
+            if (!$this->getDb()->where(['id' => $post['id'], 'clinic_id' => $data['clinic_id']])->update($data)) {
                 return error('该项目已存在！');
             }
         } else {
             $data['create_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-            if (!$this->getDb()->insert($this->table, $data)) {
+            if (!$this->getDb()->insert($data)) {
                 return error('请勿添加重复的项目！');
             }
         }
@@ -86,7 +102,7 @@ class TreatmentModel extends Crud {
             'status'   => CommonStatus::OK
         ];
         if ($name) {
-            $condition['name']    = ['like', $name . '%', 'and ('];
+            $condition['name']    = ['like', '%' . $name . '%', 'and ('];
             $condition['ident']   = ['=', $name, 'or'];
             $condition['py_code'] = ['like', $name . '%', 'or'];
             $condition['wb_code'] = ['like', $name . '%', 'or', ')'];
@@ -107,7 +123,7 @@ class TreatmentModel extends Crud {
     public function getTreatmentInfo ($id)
     {
         $id = intval($id);
-        if (!$info = $this->getDb()->table($this->table)->field('id,ident,name,price,unit,royalty,royalty_ratio,wb_code,py_code,is_special,status')->where(['id' => $id])->limit(1)->find()) {
+        if (!$info = $this->find(['id' => $id], 'id,ident,name,price,unit,royalty,royalty_ratio,wb_code,py_code,is_special,status')) {
             return [];
         }
         $info['price']       = round_dollar($info['price']);
@@ -146,7 +162,7 @@ class TreatmentModel extends Crud {
             $condition['wb_code'] = ['like', $post['name'] . '%', 'or', ')'];
         }
 
-        $count = $this->getDb()->table($this->table)->where($condition)->count();
+        $count = $this->count($condition);
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             $list = $this->select($condition, 'id,ident,name,price,unit,royalty,royalty_ratio,status', 'id desc', $pagesize['limitstr']);

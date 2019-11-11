@@ -8,20 +8,18 @@ class DbMysql extends Db {
 
     private $_db = null;
 
-    private $_parseSql = 'SELECT %FIELD% FROM %TABLE% %JOIN% %WHERE% %GROUP% %ORDER% %LIMIT%';
-
     private $_options = [];
 
     private $_bind_values = [];
 
     protected $_config = [];
 
-    public function connect ($config)
+    public function connect (array $config)
     {
         $time = microtime(true);
         try {
             $this->_db = new \PDO('mysql:dbname=' . $config['database'] . ';host=' . $config['server'] . ';port=' . $config['port'] . ';charset=utf8', $config['user'], $config['pwd'], [
-                    \PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4'
+                \PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4'
             ]);
         } catch (\PDOException $e) {
             throw $e;
@@ -42,7 +40,11 @@ class DbMysql extends Db {
 
     public function __call ($method, $args)
     {
-        $args[0] && $this->_options[strtolower($method)] = $args[0];
+        if (isset($args[0])) {
+            $this->_options[$method] = $args[0];
+        } else {
+            unset($this->_options[$method]);
+        }
         return $this;
     }
 
@@ -131,25 +133,19 @@ class DbMysql extends Db {
 
     private function parseSql ()
     {
-        $_sql = str_replace([
-                '%TABLE%',
-                '%FIELD%',
-                '%JOIN%',
-                '%WHERE%',
-                '%GROUP%',
-                '%ORDER%',
-                '%LIMIT%'
-        ], [
-                !empty($this->_options['table']) ? $this->parseTableName($this->_options['table']) : '',
-                !empty($this->_options['field']) ? (is_array($this->_options['field']) ? implode(',', $this->_options['field']) : $this->_options['field']) : '*',
-                !empty($this->_options['join']) ? $this->parseTableName($this->_options['join']) : '',
-                !empty($this->_options['where']) ? ('WHERE ' . $this->buildParams($this->_options['where'])) : '',
-                !empty($this->_options['group']) ? ('GROUP BY ' . $this->_options['group']) : '',
-                !empty($this->_options['order']) ? ('ORDER BY ' . $this->_options['order']) : '',
-                !empty($this->_options['limit']) ? ('LIMIT ' . $this->_options['limit']) : ''
-        ], $this->_parseSql);
+        $sql = [
+            'SELECT',
+            isset($this->_options['field']) && $this->_options['field'] ? (is_array($this->_options['field']) ? implode(',', $this->_options['field']) : $this->_options['field']) : '*', 
+            'FROM',
+            isset($this->_options['table']) && $this->_options['table'] ? $this->parseTableName($this->_options['table']) : null,
+            isset($this->_options['join']) && $this->_options['join']  ? $this->parseTableName($this->_options['join']) : null,
+            isset($this->_options['where']) && $this->_options['where'] ? 'WHERE ' . $this->buildParams($this->_options['where']) : null,
+            isset($this->_options['group']) && $this->_options['group'] ? 'GROUP BY ' . $this->_options['group'] : null,
+            isset($this->_options['order']) && $this->_options['order'] ? 'ORDER BY ' . $this->_options['order'] : null,
+            isset($this->_options['limit']) && $this->_options['limit'] ? 'LIMIT ' . $this->_options['limit'] : null 
+        ];
         $this->_options = [];
-        return $_sql;
+        return implode(' ', array_filter($sql));
     }
 
     /**
@@ -159,46 +155,59 @@ class DbMysql extends Db {
      */
     private function parseTableName ($query)
     {
-        return !empty($query) ? str_replace('__tablepre__', $this->_config['tablepre'], $query) : null;
+        if (empty($query)) {
+            return null;
+        }
+        $query = str_replace('__tablepre__', $this->_config['tablepre'], $query);
+        if (isset($this->_options['partition'])) {
+            if (false === strpos($query, '__partition__')) {
+                $query .= strval($this->_options['partition']);
+            } else {
+                $query = str_replace('__partition__', strval($this->_options['partition']), $query);
+            }
+        }
+        return $query;
     }
 
-    public function norepeat ($tablename, $fieldlist, $parameters = null)
+    public function norepeat (array $fieldlist)
     {
-        $fielddata = array();
+        $prepare   = $this->_bind_values ? true : false;
+        $fielddata = [];
         foreach ($fieldlist as $k => $v) {
-            $fielddata['`' . $k . '`'] = $this->getFieldPrototype($v, !empty($parameters));
+            $fielddata['`' . $k . '`'] = $this->getFieldPrototype($v, $prepare);
         }
         unset($fieldlist);
-        $key = implode(',', array_keys($fielddata));
-        $value = implode(',', array_values($fielddata));
+        $key       = implode(',', array_keys($fielddata));
+        $value     = implode(',', array_values($fielddata));
         $fielddata = urldecode(http_build_query($fielddata, '', ','));
-        $query = 'INSERT INTO `' . $this->parseTableName($tablename) . '` (' . $key . ') VALUES (' . $value . ') ON DUPLICATE KEY UPDATE ' . $fielddata . ';';
+        $query     = 'INSERT INTO `' . $this->parseTableName($this->_options['table']) . '` (' . $key . ') VALUES (' . $value . ') ON DUPLICATE KEY UPDATE ' . $fielddata;
         unset($key, $value, $fielddata);
-        return $this->execute($query, $parameters, function  ($statement) {
+        return $this->execute($query, null, function ($statement) {
             return $statement->rowCount();
         });
     }
 
-    public function insert ($tablename, $fieldlist, $parameters = null, $replace = false, $insert_id = false)
+    public function insert (array $fieldlist, $replace = false, $insert_id = false)
     {
-        $key = [];
-        $value = [];
+        $prepare = $this->_bind_values ? true : false;
+        $key     = [];
+        $value   = [];
         if (isset($fieldlist[0])) {
             $key = array_keys($fieldlist[0]);
             foreach ($fieldlist as $k => $v) {
                 foreach ($v as $kk => $vv) {
-                    $value[$k][] = $this->getFieldPrototype($vv, !empty($parameters));
+                    $value[$k][] = $this->getFieldPrototype($vv, $prepare);
                 }
             }
         } else {
             foreach ($fieldlist as $k => $v) {
                 $key[] = $k;
                 if (!is_array($v)) {
-                    $value[0][] = $this->getFieldPrototype($v, !empty($parameters));
+                    $value[0][] = $this->getFieldPrototype($v, $prepare);
                 } else {
                     $i = 0;
                     foreach ($v as $kk => $vv) {
-                        $value[$i++][] = $this->getFieldPrototype($vv, !empty($parameters));
+                        $value[$i++][] = $this->getFieldPrototype($vv, $prepare);
                     }
                 }
             }
@@ -209,34 +218,35 @@ class DbMysql extends Db {
             $value[$k] = '(' . implode(',', $v) . ')';
         }
         $value = implode(',', $value);
-        $query = ($replace ? 'REPLACE' : 'INSERT') . ' INTO ' . $this->parseTableName($tablename) . ' (' . $key . ') VALUES ' . $value;
+        $query = ($replace ? 'REPLACE' : 'INSERT') . ' INTO ' . $this->parseTableName($this->_options['table']) . ' (' . $key . ') VALUES ' . $value;
         unset($key, $value);
-        $result = $this->execute($query, $parameters, function  ($statement) {
+        $result = $this->execute($query, null, function ($statement) {
             return $statement->rowCount();
         });
         if ($result) {
             if ($insert_id) {
-                return $this->getlastid();
+                return $this->getLastId();
             }
         }
         return $result;
     }
 
-    public function update ($tablename, $fieldlist, $where, $parameters = null)
+    public function update (array $fieldlist)
     {
-        $value = [];
+        $prepare = $this->_bind_values ? true : false;
+        $value   = [];
         foreach ($fieldlist as $k => $v) {
             if (is_array($v)) {
                 $value[] = '`' . $k . '` = ' . current($v);
             } else {
-                $value[] = '`' . $k . '` = ' . $this->getFieldPrototype($v, !empty($parameters));
+                $value[] = '`' . $k . '` = ' . $this->getFieldPrototype($v, $prepare);
             }
         }
         unset($fieldlist);
         $value = implode(',', $value);
-        $query = 'UPDATE ' . $this->parseTableName($tablename) . ' SET ' . $value . ' WHERE ' . $this->buildParams($where);
-        unset($value, $where);
-        return $this->execute($query, $parameters, function  ($statement) {
+        $query = 'UPDATE ' . $this->parseTableName($this->_options['table']) . ' SET ' . $value . ' WHERE ' . $this->buildParams($this->_options['where']);
+        unset($value);
+        return $this->execute($query, null, function ($statement) {
             return $statement->rowCount();
         });
     }
@@ -244,11 +254,10 @@ class DbMysql extends Db {
     /**
      * 删除一条记录
      */
-    public function delete ($tablename, $where, $parameters = null)
+    public function delete ()
     {
-        $query = 'DELETE FROM ' . $this->parseTableName($tablename) . ' WHERE ' .  $this->buildParams($where);
-        unset($where);
-        return $this->execute($query, $parameters, function  ($statement) {
+        $query = 'DELETE FROM ' . $this->parseTableName($this->_options['table']) . ' WHERE ' .  $this->buildParams($this->_options['where']);
+        return $this->execute($query, null, function ($statement) {
             return $statement->rowCount();
         });
     }
@@ -258,7 +267,7 @@ class DbMysql extends Db {
      */
     public function query ($query, $parameters = null)
     {
-        return $this->execute($this->parseTableName($query), $parameters, function  ($statement) {
+        return $this->execute($this->parseTableName($query), $parameters, function ($statement) {
             return $statement->rowCount();
         });
     }
@@ -268,7 +277,7 @@ class DbMysql extends Db {
      */
     public function find ($query = null, $first = false)
     {
-        return $first ? $this->count($query) : $this->execute($this->parseTableName($query), null, function  ($statement) {
+        return $first ? $this->count($query) : $this->execute($this->parseTableName($query), null, function ($statement) {
             return $statement->fetch();
         });
     }
@@ -281,7 +290,7 @@ class DbMysql extends Db {
         if (!isset($this->_options['field'])) {
             $this->_options['field'] = 'count(*) as count';
         }
-        return $this->execute($this->parseTableName($query), null, function  ($statement) {
+        return $this->execute($this->parseTableName($query), null, function ($statement) {
             return $statement->fetchColumn();
         });
     }
@@ -291,7 +300,7 @@ class DbMysql extends Db {
      */
     public function select ($query = null)
     {
-        return $this->execute($this->parseTableName($query), null, function  ($statement) {
+        return $this->execute($this->parseTableName($query), null, function ($statement) {
             return $statement->fetchAll();
         });
     }
@@ -299,11 +308,8 @@ class DbMysql extends Db {
     /**
      * 事务提交
      */
-    public function transaction ($callback)
+    public function transaction (\Closure $callback)
     {
-        if (!isset($callback)) {
-            return false;
-        }
         if (!$this->beginTrans()) {
             return false;
         }
@@ -321,7 +327,7 @@ class DbMysql extends Db {
     /**
      * 返回 lastInsertId
      */
-    public function getlastid ()
+    public function getLastId ()
     {
         return $this->_db->lastInsertId();
     }
@@ -400,7 +406,7 @@ class DbMysql extends Db {
     private function execute ($query, $parameters = null, $invoke = null, $reconnection = false)
     {
         // 忽略错误
-        $ignoreLevel = isset($this->_options['ignorelevel']) ? $this->_options['ignorelevel'] : 0;
+        $ignoreLevel = isset($this->_options['ignoreLevel']) ? $this->_options['ignoreLevel'] : 0;
         // 解析sql
         if (empty($query)) {
             $query = $this->parseSql();
@@ -411,8 +417,8 @@ class DbMysql extends Db {
             $this->bindValue($parameters);
         }
         $parameters = $this->getBindValue();
-        $lastSql = $this->putLastSql($query . json_unicode_encode($parameters));
-        $time = microtime(true);
+        $lastSql = $this->putLastSql($query. ' ' . json_unicode_encode($parameters));
+        $time  = microtime(true);
         try {
             $statement = $this->_db->prepare($query);
             if (!empty($parameters)) {
@@ -447,7 +453,7 @@ class DbMysql extends Db {
         if ($this->_debug === true && $reconnection === false && $ignoreLevel != 1 && $ignoreLevel != 2) {
             DebugLog::_mysql(null, concat('[', round(microtime(true) - $time, 3), 's] ', $lastSql));
         }
-        if (isset($invoke)) {
+        if (is_callable($invoke)) {
             return call_user_func_array($invoke, [$statement]);
         }
         return $statement;

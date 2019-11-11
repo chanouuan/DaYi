@@ -27,7 +27,7 @@ class UserModel extends Crud {
             'update_time' => date('Y-m-d H:i:s', TIMESTAMP)
         ];
         !empty($opt) && $update = array_merge($update, $opt);
-        if (!$this->getDb()->norepeat('__tablepre__session', $update)) {
+        if (!$this->getDb()->table('__tablepre__session')->norepeat($update)) {
             return error(null);
         }
         $token = rawurlencode(authcode(implode("\t", array_merge([$user_id, $scode, $update['clienttype'], $_SERVER['REMOTE_ADDR']], $extra)), 'ENCODE'));
@@ -43,13 +43,13 @@ class UserModel extends Crud {
      */
     public function logout ($user_id, $clienttype = null)
     {
-        if (!$this->getDb()->update('__tablepre__session', [
+        if (!$this->getDb()->table('__tablepre__session')->where([
+            'user_id'    => $user_id,
+            'clienttype' => get_real_val($clienttype, CLIENT_TYPE)
+        ])->update([
             'scode'       => 0,
             'online'      => 0,
             'update_time' => date('Y-m-d H:i:s', TIMESTAMP)
-        ], [
-            'user_id'    => $user_id,
-            'clienttype' => get_real_val($clienttype, CLIENT_TYPE)
         ])) {
             return false;
         }

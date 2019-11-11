@@ -30,6 +30,16 @@ class DrugType
         return in_array($code, [self::WESTERN, self::NEUTRAL]);
     }
 
+    /**
+     * 是否药品
+     * @param $code
+     * @return bool
+     */
+    public static function isDrug ($code)
+    {
+        return in_array($code, [self::WESTERN, self::NEUTRAL, self::CHINESE]);
+    }
+
     public static function format ($code)
     {
         return isset(self::$message[$code]) ? $code : null;

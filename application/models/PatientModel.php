@@ -48,12 +48,12 @@ class PatientModel extends Crud {
             'gender'    => $gender
         ];
 
-        if ($patientInfo = $this->getDb()->table($this->table)->field('id')->where($data)->limit(1)->find()) {
+        if ($patientInfo = $this->find($data, 'id')) {
             return $patientInfo['id'];
         }
 
         $data['create_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-        return $this->getDb()->insert($this->table, $data, null, null, true);
+        return $this->getDb()->insert($data, null, true);
     }
 
 }

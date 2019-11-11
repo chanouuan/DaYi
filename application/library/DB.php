@@ -52,7 +52,7 @@ abstract class DB {
         return $dbclass;
     }
 
-    abstract protected function connect ($config);
+    abstract protected function connect (array $config);
 
     abstract protected function close ();
 
