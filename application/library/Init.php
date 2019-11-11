@@ -536,7 +536,7 @@ class ComposerAutoloader {
         $classDir[] = $class . '.php';
         $classDir = implode(DIRECTORY_SEPARATOR, $classDir);
         if (file_exists($classDir)) {
-            self::includeFile($classDir);
+            include $classDir;
             return true;
         } else {
             throw new \Exception('failed to open stream: ' . $class);
@@ -549,11 +549,6 @@ class ComposerAutoloader {
             'ComposerAutoloader',
             'loadClassLoader'
         ), true, true);
-    }
-
-    public static function includeFile($file)
-    {
-        include $file;
     }
 
 }
@@ -754,8 +749,8 @@ class DebugLog {
 
 }
 
-class Errors
-{
+class Errors {
+    
     /**
      * 注册异常处理
      * @return void
@@ -828,8 +823,8 @@ class Errors
 
 }
 
-class Route
-{
+class Route {
+
     // 路由规则
     private static $rules = [
         'get'     => [],
@@ -1084,8 +1079,8 @@ class Route
 
 }
 
-class RateLimit
-{
+class RateLimit {
+
     public static function grant($key, $rule = null, $interval = null, $adapter = null)
     {
         if ($rule) {
@@ -1152,23 +1147,23 @@ class RateLimit
     }
 }
 
-class StatusCodes
-{
-    const STATUS_OK                          = 200;
-    const STATUS_ERROR                       = 500;
-    const STATUS_404                         = 404;
-    const STATUS_PERMISSION_DENIED           = 403;
-    const STATUS_UNAUTHORIZED                = 401;
+class StatusCodes {
 
-    const TOKEN_VALIDATE_FAIL                = 3001;
-    const TOKEN_UNAUTHORIZED                 = 3002;
-    const SIG_EXPIRE                         = 3003;
-    const SIG_ERROR                          = 3004;
-    const REQUEST_METHOD_ERROR               = 3005;
-    const USER_NOT_LOGIN_ERROR               = 3010;
+    const STATUS_OK                = 200;
+    const STATUS_ERROR             = 500;
+    const STATUS_404               = 404;
+    const STATUS_PERMISSION_DENIED = 403;
+    const STATUS_UNAUTHORIZED      = 401;
 
-    const ACCESS_NUM_OVERFLOW                = 4001;
-    const REQUEST_REPEAT                     = 4002;
+    const TOKEN_VALIDATE_FAIL      = 3001;
+    const TOKEN_UNAUTHORIZED       = 3002;
+    const SIG_EXPIRE               = 3003;
+    const SIG_ERROR                = 3004;
+    const REQUEST_METHOD_ERROR     = 3005;
+    const USER_NOT_LOGIN_ERROR     = 3010;
+
+    const ACCESS_NUM_OVERFLOW      = 4001;
+    const REQUEST_REPEAT           = 4002;
 
     static $message = [
         200  => '成功',
@@ -1183,7 +1178,8 @@ class StatusCodes
         4002 => '你已提交请求'
     ];
 
-    public static function getMessage($code) {
+    public static function getMessage($code)
+    {
         return isset(self::$message[$code]) ? self::$message[$code] : '';
     }
 
