@@ -8,17 +8,24 @@ namespace app\common;
 class StockWay
 {
 
+    const AUTO_BACK = 5;
+    const AUTO_PUT  = 36;
+
     static $message = [
+        /* 入库 */
         1 => '采购入库',
         2 => '科室退药',
         3 => '调拨入库',
         4 => '其他入库',
+        5 => '自动退药',
+        /* 出库 */
         30 => '退货出库',
         31 => '科室领药',
         32 => '报损出库',
         33 => '调拨出库',
         34 => '赠品',
         35 => '其他出库'
+        36 => '自动发药'
     ];
 
     /**
@@ -29,7 +36,7 @@ class StockWay
     {
         $list = [];
         foreach (self::$message as $k => $v) {
-            if ($k < 30) {
+            if ($k < 30 && $k != self::AUTO_BACK) {
                 $list[$k] = $v;
             } else {
                 break;
@@ -46,7 +53,7 @@ class StockWay
     {
         $list = [];
         foreach (self::$message as $k => $v) {
-            if ($k > 29) {
+            if ($k > 29 && $k != self::AUTO_PUT) {
                 $list[$k] = $v;
             }
         }

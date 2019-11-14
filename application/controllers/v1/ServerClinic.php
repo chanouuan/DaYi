@@ -29,7 +29,7 @@ class ServerClinic extends ActionPDO {
             'saveDoctorCard'       => ['interval' => 1000],
             'printTemplete'        => ['interval' => 1000],
             'buyDrug'              => ['interval' => 1000],
-            'localCharge'          => ['interval' => 1000],
+            'localCharge'          => ['interval' => 2000],
             'getMessageCount'      => ['interval' => 1000],
             'getDrugList'          => ['interval' => 200],
             'saveDrug'             => ['interval' => 1000],
@@ -60,7 +60,8 @@ class ServerClinic extends ActionPDO {
                 'getUserProfile',
                 'getDoctorList',
                 'printTemplete',
-                'getDoctorOrderDetail'
+                'getDoctorOrderDetail',
+                'getDrugInfo'
             ];
             // 重命名
             $map = [
@@ -443,7 +444,7 @@ class ServerClinic extends ActionPDO {
 
     /**
      * 搜索药品
-     * @param *clinic_id 门店ID
+     * @param *clinic_id 诊所
      * @param *drug_type 药品类型
      * @param *name 药品名称
      * @return array
@@ -456,6 +457,22 @@ class ServerClinic extends ActionPDO {
     public function searchDrug ()
     {
         return (new ServerClinicModel())->searchDrug($_POST);
+    }
+
+    /**
+     * 搜索批次
+     * @param *clinic_id 诊所
+     * @param *name 药品名称
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function searchBatch ()
+    {
+        return (new ServerClinicModel())->searchBatch($_POST);
     }
 
     /**
@@ -675,7 +692,7 @@ class ServerClinic extends ActionPDO {
      */
     public function getDrugList ()
     {
-        return (new DrugModel())->getDrugList($this->_G['user']['user_id'], $_POST);
+        return (new DrugModel($this->_G['user']['user_id']))->getDrugList($_POST);
     }
 
     /**
@@ -691,11 +708,12 @@ class ServerClinic extends ActionPDO {
      */
     public function saveDrug ()
     {
-        return (new DrugModel())->saveDrug($this->_G['user']['user_id'], $_POST);
+        return (new DrugModel($this->_G['user']['user_id'], ))->saveDrug($_POST);
     }
 
     /**
      * 获取药品信息
+     * @login
      * @param id 药品ID
      * @return array
      * {
@@ -706,7 +724,7 @@ class ServerClinic extends ActionPDO {
      */
     public function getDrugInfo ()
     {
-        return success((new DrugModel())->getDrugInfo(getgpc('id')));
+        return success((new DrugModel($this->_G['user']['user_id'], ))->getDrugInfo(getgpc('id')));
     }
 
     /**
@@ -856,7 +874,7 @@ class ServerClinic extends ActionPDO {
     public function getStockList ()
     {
         $_POST['is_procure'] = 1; // 已采购
-        return (new DrugModel())->getDrugList($this->_G['user']['user_id'], $_POST);
+        return (new DrugModel($this->_G['user']['user_id']))->getDrugList($_POST);
     }
 
     /**

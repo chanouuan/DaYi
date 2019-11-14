@@ -21,7 +21,7 @@ class DbMysql extends Db {
             $this->_db = new \PDO('mysql:dbname=' . $config['database'] . ';host=' . $config['server'] . ';port=' . $config['port'] . ';charset=utf8', $config['user'], $config['pwd'], [
                 \PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4'
             ]);
-        } catch (\PDOException $e) {
+        } catch (\Exception $e) {
             throw $e;
         }
         $this->_db->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC); // 返回一个索引为结果集列名的数组
@@ -431,7 +431,7 @@ class DbMysql extends Db {
                 }
             }
             $statement->execute();
-        } catch (\PDOException $e) {
+        } catch (\Exception $e) {
             // 记录日志
             if ($reconnection === false && $ignoreLevel != 2) {
                 DebugLog::_mysql(null, concat('[', round(microtime(true) - $time, 3), 's] ', $lastSql), $this->error($e->errorInfo));
@@ -440,7 +440,7 @@ class DbMysql extends Db {
                 $this->close();
                 try {
                     $this->connect($this->_config);
-                } catch (\PDOException $e) {
+                } catch (\Exception $e) {
                     return false;
                 }
                 return $this->execute($query, $parameters, $invoke, true);
@@ -464,6 +464,7 @@ class DbMysql extends Db {
      */
     private function beginTrans ()
     {
+        DebugLog::_mysql(null, '#begin');
         return $this->_db->beginTransaction();
     }
 
@@ -472,6 +473,7 @@ class DbMysql extends Db {
      */
     private function commitTrans ()
     {
+        DebugLog::_mysql(null, '#commit');
         return $this->_db->commit();
     }
 
@@ -481,6 +483,7 @@ class DbMysql extends Db {
     private function rollBackTrans ()
     {
         if ($this->_db->inTransaction()) {
+            DebugLog::_mysql(null, '#rollBack');
             return $this->_db->rollBack();
         }
         return true;

@@ -14,15 +14,21 @@ class StockModel extends Crud {
     protected $table    = 'dayi_stock';
     protected $userInfo = null;
 
-    public function __construct ($user_id)
+    public function __construct ($user_id = null, $clinic_id = null)
     {
         // 分区
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            json(null, $userInfo['message'], $userInfo['errorcode']);
+        if ($user_id) {
+            $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+            if ($userInfo['errorcode'] !== 0) {
+                json(null, $userInfo['message'], $userInfo['errorcode']);
+            }
+            $this->userInfo = $userInfo['result'];
+            $clinic_id = $this->userInfo['clinic_id'];
         }
-        $this->userInfo = $userInfo['result'];
-        list($this->link, $this->partition) = GenerateCache::getClinicPartition($this->userInfo['clinic_id']);
+        if (empty($clinic_id)) {
+            json(null, '参数错误', -1);
+        }
+        list($this->link, $this->partition) = GenerateCache::getClinicPartition($clinic_id);
     }
 
     /**
@@ -212,6 +218,32 @@ class StockModel extends Crud {
     }
 
     /**
+     * 搜索批次
+     * @return array
+     */
+    public function searchBatch (array $post, $limit = 5)
+    {
+        // 搜索药品
+        $post['clinic_id']  = $this->userInfo['clinic_id'];
+        $post['is_procure'] = 1；
+        if (!$drugs = (new DrugModel(null, $this->userInfo['clinic_id']))->search($post, 'id', $limit)) {
+            return [];
+        }
+
+        if (!$batches = $this->getBatchDetail(['clinic_id' => $this->userInfo['clinic_id'], 'drug_id' => ['in', array_column($drugs, 'id')]])) {
+            return [];
+        }
+
+        foreach ($list as $k => $v) {
+            $list[$k]['amount_unit']    = $v['amount'] . $v['dispense_unit'];
+            $list[$k]['retail_price']   = round_dollar($v['retail_price']);
+            $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
+        }
+
+        return $list;
+    }
+
+    /**
      * 删除出入库
      * @return array
      */
@@ -223,7 +255,7 @@ class StockModel extends Crud {
             return error('出入库单不存在');
         }
 
-        if (!$this->getDb()->transaction(function ($db) use($stockInfo) {
+        if (!$this->getDb()->transaction(function ($db) use ($stockInfo) {
             // 删除出入库
             if (!$db->where(['id' => $stockInfo['id'], 'status' => CommonStatus::NOT])->delete()) {
                 return false;
@@ -258,7 +290,7 @@ class StockModel extends Crud {
 
         $details = $this->totalAmount($details);
 
-        $drugModel = new DrugModel();
+        $drugModel = new DrugModel(null, $this->userInfo['clinic_id']);
 
         // 检查库存
         $validations = [];
@@ -273,7 +305,7 @@ class StockModel extends Crud {
             }
         }
 
-        if (!$this->getDb()->transaction(function ($db) use($stockInfo, $details, $drugModel) {
+        if (!$this->getDb()->transaction(function ($db) use ($stockInfo, $details, $drugModel) {
             // 更新出入库
             if (!$db->where(['id' => $stockInfo['id'], 'status' => CommonStatus::NOT])->update([
                 'confirm_admin_id' => $this->userInfo['id'],
@@ -292,7 +324,7 @@ class StockModel extends Crud {
                     $data[$k]['purchase_price'] = $v['purchase_price'];
                 }
             }
-            return $drugModel->updateAmount(null, StockType::getOp($stockInfo['stock_type']), $data);
+            return $drugModel->updateAmount(null, $stockInfo['stock_type'], $data);
         })) {
             return error('库存不足');
         }
@@ -323,6 +355,162 @@ class StockModel extends Crud {
     }
 
     /**
+     * 自动退药
+     * @return bool
+     */
+    public function backDrug ($clinic_id, $stock_id, array $data)
+    {
+        if (!$stock_id) {
+            return true;
+        }
+
+        // 获取已发药
+        if (!$batches = $this->getDb()
+                ->table('dayi_stock_detail')
+                ->field('clinic_id,drug_id,batch_number,amount,name,drug_type,package_spec,dispense_unit,retail_price,purchase_price,manufactor_name,valid_time')
+                ->where(['clinic_id' => $clinic_id, 'stock_id' => $stock_id, 'drug_id' => ['in', array_keys($data)]])
+                ->order('id')
+                ->select()) {
+            return false;
+        }
+
+        // 自动退药
+        $list = [
+            'clinic_id'   => $clinic_id,
+            'stock_type'  => StockType::PULL,
+            'stock_way'   => StockType::getAutoWay(StockType::PULL),
+            'stock_date'  => date('Y-m-d', TIMESTAMP),
+            'status'      => CommonStatus::OK,
+            'update_time' => date('Y-m-d H:i:s', TIMESTAMP),
+            'create_time' => date('Y-m-d H:i:s', TIMESTAMP),
+            'details'     => []
+        ];
+
+        foreach ($data as $k => $v) {
+            $amount = abs($v['amount']);
+            foreach ($batches as $kk => $vv) {
+                if ($k == $vv['drug_id']) {
+                    $vv['amount'] = abs($vv['amount']); // 入库用正号
+                    if ($amount <= $vv['amount']) {
+                        $vv['amount'] = $amount;
+                        $list['details'][] = $vv;
+                        $amount = 0;
+                        break;
+                    } else {
+                        $amount -= $vv['amount'];
+                        $list['details'][] = $vv;
+                    }
+                }
+            }
+            if ($amount) {
+                // 退药数量大于库存
+                return false;
+            }
+        }
+
+        unset($batches);
+        return handleInsert($list);
+    }
+
+    /**
+     * 自动发药
+     * @return bool
+     */
+    public function putDrug ($clinic_id, array $data)
+    {
+        if (empty($data)) {
+            return true;
+        }
+        
+        // 获取诊所
+        if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
+            return false;
+        }
+        // is_cp:收费即发药 is_rp:退费即退药
+        if (!$clinicInfo['is_cp']) {
+            return true;
+        }
+
+        // 获取药品批号分组库存，发药规则先进先出
+        if (!$batches = $this->getBatchDetail(['clinic_id' => $clinic_id, 'drug_id' => ['in', array_keys($data)]])) {
+            return false;
+        }
+
+        // 自动发药
+        $list = [
+            'clinic_id'   => $clinic_id,
+            'stock_type'  => StockType::PUSH,
+            'stock_way'   => StockType::getAutoWay(StockType::PUSH),
+            'stock_date'  => date('Y-m-d', TIMESTAMP),
+            'status'      => CommonStatus::OK,
+            'update_time' => date('Y-m-d H:i:s', TIMESTAMP),
+            'create_time' => date('Y-m-d H:i:s', TIMESTAMP),
+            'details'     => []
+        ];
+
+        // 迭代出库药品
+        foreach ($data as $k => $v) {
+            $amount = abs($v['amount']);
+            foreach ($batches as $kk => $vv) {
+                if ($vv['amount'] <= 0) {
+                    continue;
+                }
+                if ($k == $vv['drug_id']) {
+                    if ($amount <= $vv['amount']) {
+                        $vv['amount'] = -$amount; // 出库用负号
+                        $list['details'][] = $vv;
+                        $amount = 0;
+                        break;
+                    } else {
+                        $amount -= $vv['amount'];
+                        $vv['amount'] = -$vv['amount']; // 出库用负号
+                        $list['details'][] = $vv;
+                    }
+                }
+            }
+            if ($amount) {
+                // 发药数量大于库存
+                return false;
+            }
+        }
+
+        unset($batches);
+        return handleInsert($list);
+    }
+
+    /**
+     * 新增事务
+     * @return bool
+     */
+    public function handleInsert (array $post)
+    {
+        if (!$stockId = $this->getDb()->insert([
+            'clinic_id'       => $post['clinic_id'],
+            'stock_type'      => $post['stock_type'],
+            'stock_way'       => $post['stock_way'],
+            'stock_date'      => $post['stock_date'],
+            'supplier'        => $post['supplier'],
+            'invoice'         => $post['invoice'],
+            'employee_id'     => $post['employee_id'],
+            'purchase_price'  => $post['purchase_price'],
+            'remark'          => $post['remark'],
+            'create_admin_id' => $this->userInfo['id'],
+            'status'          => isset($post['status']) ? $post['status'] : 0,
+            'update_time'     => date('Y-m-d H:i:s', TIMESTAMP),
+            'create_time'     => date('Y-m-d H:i:s', TIMESTAMP)
+        ], null, true)) {
+            return false;
+        }
+        foreach ($post['details'] as $k => $v) {
+            $post['details'][$k]['stock_id'] = $stockId;
+        }
+        if (!$this->getDb()->table('dayi_stock_detail')->insert($post['details'])) {
+            return false;
+        }
+        return $stockId;
+    }
+
+    /**
      * 新增出入库
      * @return array
      */
@@ -337,32 +525,9 @@ class StockModel extends Crud {
         }
         $post = $post['result'];
 
-        if (!$stockId = $this->getDb()->transaction(function ($db) use($post) {
+        if (!$stockId = $this->getDb()->transaction(function ($db) use ($post) {
             // 新增出入库
-            if (!$stockId = $db->insert([
-                'clinic_id'       => $post['clinic_id'],
-                'stock_type'      => $post['stock_type'],
-                'stock_way'       => $post['stock_way'],
-                'stock_date'      => $post['stock_date'],
-                'supplier'        => $post['supplier'],
-                'invoice'         => $post['invoice'],
-                'employee_id'     => $post['employee_id'],
-                'purchase_price'  => $post['purchase_price'],
-                'remark'          => $post['remark'],
-                'create_admin_id' => $this->userInfo['id'],
-                'update_time'     => date('Y-m-d H:i:s', TIMESTAMP),
-                'create_time'     => date('Y-m-d H:i:s', TIMESTAMP)
-            ], null, true)) {
-                return false;
-            }
-            // 新增出入库详情
-            foreach ($post['details'] as $k => $v) {
-                $post['details'][$k]['stock_id'] = $stockId;
-            }
-            if (!$db->partition($this->partition)->table('dayi_stock_detail')->insert($post['details'])) {
-                return false;
-            }
-            return $stockId;
+            return $this->handleInsert($post);
         })) {
             return error('保存数据失败');
         }
@@ -371,6 +536,22 @@ class StockModel extends Crud {
         return success([
             'stock_id' => $stockId
         ]);
+    }
+
+    /**
+     * 获取入库批次
+     * @return array
+     */
+    protected function getBatchDetail (array $condition, $field = null)
+    {
+        $field = $field ? $field : 'clinic_id,drug_id,batch_number,sum(amount) as amount,name,drug_type,package_spec,dispense_unit,retail_price,purchase_price,manufactor_name,valid_time';
+        return $this->getDb()
+                ->table('dayi_stock_detail')
+                ->field($field)
+                ->where($condition)
+                ->group('drug_id,batch_number having amount > 0')
+                ->order('id')
+                ->select();
     }
 
     /**
@@ -420,34 +601,52 @@ class StockModel extends Crud {
     protected function arrangeDetails (array $details, $stock_type, $clinic_id)
     {
         foreach ($details as $k => $v) {
-            $details[$k]['drug_id']        = intval($v['drug_id']);
-            $details[$k]['amount']         = max(0, intval($v['amount']));
-            $details[$k]['amount']         = $stock_type == StockType::PUSH ? 0 - $details[$k]['amount'] : $details[$k]['amount'];
-            $details[$k]['purchase_price'] = $stock_type == StockType::PUSH ? null : max(0, intval(floatval($v['purchase_price']) * 100));
-            $details[$k]['batch_number']   = trim_space($v['batch_number']);
-            $details[$k]['valid_time']     = strtotime($v['valid_time']);
-            $details[$k]['valid_time']     = $details[$k]['valid_time'] ? date('Y-m-d', $details[$k]['valid_time']) : null;
+            $details[$k]['drug_id']         = intval($v['drug_id']);
+            $details[$k]['amount']          = max(0, intval($v['amount']));
+            $details[$k]['amount']          = $stock_type == StockType::PUSH ? 0 - $details[$k]['amount'] : $details[$k]['amount'];
+            $details[$k]['purchase_price']  = $stock_type == StockType::PUSH ? null : max(0, intval(floatval($v['purchase_price']) * 100));
+            $details[$k]['batch_number']    = trim_space($v['batch_number'], '');
+            $details[$k]['valid_time']      = strtotime($v['valid_time']);
+            $details[$k]['valid_time']      = $details[$k]['valid_time'] ? date('Y-m-d', $details[$k]['valid_time']) : null;
             $details[$k]['manufactor_name'] = trim_space($v['manufactor_name']);
             if (!$details[$k]['drug_id'] || !$details[$k]['amount']) {
                 return false;
             }
         }
 
-        // 获取药品数量
-        $list = [];
-        foreach ($details as $k => $v) {
-            $list[$v['drug_id']] += $v['amount'];
-        }
-
-        // 检查库存
+        $list = array_unique(array_column($details, 'drug_id'));
         $validations = [];
         foreach ($list as $k => $v) {
-            $validations[$k]['clinic_id'] = $clinic_id;
-            if ($stock_type == StockType::PUSH) {
-                $validations[$k]['amount'] = abs($v);
+            $validations[$v]['clinic_id'] = $clinic_id;
+        }
+        
+        if ($stock_type == StockType::PUSH) {
+            // 出库
+            if (!$res = $this->getBatchDetail(['clinic_id' => $clinic_id, 'drug_id' => ['in', $list], 'batch_number' => ['in', array_unique(array_column($details, 'batch_number'))]], 'drug_id,sum(amount) as amount,batch_number')) {
+                return false;
+            }
+            // 检查库存
+            $batches = [];
+            foreach ($res as $k => $v) {
+                $batches[$v['drug_id'] . '_' . $v['batch_number']] = $v['amount'];
+            }
+            unset($res);
+            $list = [];
+            foreach ($details as $k => $v) {
+                $list[$v['drug_id'] . '_' . $v['batch_number']] += abs($v['amount']);
+            }
+            foreach ($list as $k => $v) {
+                if (!isset($batches[$k])) {
+                    return false;
+                }
+                if ($v > $batches[$k]) {
+                    return false; // 库存不足
+                }
             }
         }
-        if (!$list = (new DrugModel())->validationAmount(null, $validations, true, true)) {
+
+        // 获取药品
+        if (!$list = (new DrugModel(null, $clinic_id))->validationAmount(null, $validations, true, true)) {
             return false;
         }
 

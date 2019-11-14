@@ -32,6 +32,22 @@ class StockType
         return null;
     }
 
+    /**
+     * 获取自动出入库方式（自动发药 / 自动退药）
+     * @param $code
+     * @return string
+     */
+    public static function getAutoWay ($code)
+    {
+        if ($code == self::PULL) {
+            return StockWay::AUTO_BACK;
+        }
+        if ($code == self::PUSH) {
+            return StockWay::AUTO_PUT;;
+        }
+        return null;
+    }
+
     public static function format ($code)
     {
         return isset(self::$message[$code]) ? $code : null;

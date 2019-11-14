@@ -8,11 +8,30 @@ use app\common\DrugDosage;
 use app\common\NoteUsage;
 use app\common\NoteFrequency;
 use app\common\GenerateCache;
+use app\common\StockType;
 use Crud;
 
 class DrugModel extends Crud {
 
-    protected $table = 'dayi_drug';
+    protected $table    = 'dayi_drug';
+    protected $userInfo = null;
+
+    public function __construct ($user_id = null, $clinic_id = null)
+    {
+        // 分区
+        if ($user_id) {
+            $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+            if ($userInfo['errorcode'] !== 0) {
+                json(null, $userInfo['message'], $userInfo['errorcode']);
+            }
+            $this->userInfo = $userInfo['result'];
+            $clinic_id = $this->userInfo['clinic_id'];
+        }
+        if (empty($clinic_id)) {
+            json(null, '参数错误', -1);
+        }
+        list($this->link, $this->partition) = GenerateCache::getClinicPartition($clinic_id);
+    }
 
     /**
      * 药品库存效验
@@ -57,20 +76,26 @@ class DrugModel extends Crud {
      * 更新药品库存 + / -
      * @return bool
      */
-    public function updateAmount ($clinic_id, $op, array $data)
+    public function updateAmount ($clinic_id, $stock_type, array $data)
     {
+        if (empty($data)) {
+            return true;
+        }
+        if (!StockType::format($stock_type)) {
+            return false;
+        }
         if ($clinic_id) {
             // 获取诊所
             if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
                 return false;
             }
             // is_cp:收费即发药 is_rp:退费即退药
-            if ($op == '-') {
+            if ($stock_type == StockType::PUSH) {
                 // 收费
                 if (!$clinicInfo['is_cp']) {
                     return true;
                 }
-            } elseif ($op == '+') {
+            } elseif ($stock_type == StockType::PULL) {
                 // 退费
                 if (!$clinicInfo['is_rp']) {
                     return true;
@@ -79,34 +104,26 @@ class DrugModel extends Crud {
                 return false;
             }
         }
-        return $this->getDb()->transaction(function ($db) use($op, $data) {
-            foreach ($data as $k => $v) {
-                $v['amount'] = ['amount' . $op . abs($v['amount'])];
-                if (!$db->table($this->table)->where(['id' => $k])->update($v)) {
-                    return false;
-                }
+        foreach ($data as $k => $v) {
+            $v['amount'] = ['amount' . StockType::getOp($stock_type) . abs($v['amount'])];
+            if (!$this->getDb()->where(['id' => $k])->update($v)) {
+                return false;
             }
-            return true;
-        });    
+        }
+        return true;  
     }
 
     /**
      * 添加药品
      * @return array
      */
-    public function saveDrug ($user_id, $post)
+    public function saveDrug (array $post)
     {
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
         $post['id']     = intval($post['id']);
         $post['status'] = intval($post['status']);
 
         $data = [];
-        $data['clinic_id']       = $userInfo['clinic_id'];
+        $data['clinic_id']       = $this->userInfo['clinic_id'];
         $data['name']            = $post['name'] ? trim_space($post['name']) : null;
         $data['drug_type']       = DrugType::format($post['drug_type']);
         $data['approval_num']    = $post['approval_num'] ? trim_space($post['approval_num']) : null;
@@ -221,39 +238,6 @@ class DrugModel extends Crud {
     }
 
     /**
-     * 查询药品字典
-     * @param $drug_type
-     * @param $name
-     * @param $limit
-     * @return array
-     */
-    public function searchDict ($drug_type, $name, $limit = 5)
-    {
-        $condition = [];
-        if ($drug_type) {
-            $condition['drug_type'] = is_array($drug_type) ? ['in', $drug_type] : $drug_type;
-        }
-        if ($name) {
-            $condition['name']    = ['like', '%' . $name . '%', 'and ('];
-            $condition['py_code'] = ['like', $name . '%', 'or'];
-            $condition['wb_code'] = ['like', $name . '%', 'or'];
-            $condition['approval_num'] = ['=', $name, 'or'];
-            $condition['barcode'] = ['=', $name, 'or', ')'];
-        }
-        if (!$list = $this->getDb()->table('dayi_drug_dict')->field('id,drug_type,approval_num,name,package_spec,manufactor_name,dispense_unit,basic_amount,basic_unit,dosage_unit,dosage_amount,py_code,wb_code,dosage_type,barcode,goods_name,standard_code,drug_code,retail_price')->where($condition)->limit($limit)->select()) {
-            return [];
-        }
-        $drugTypeEnum   = array_flip(DrugType::$message);
-        $drugDosageEnum = array_flip(DrugDosage::$message);
-        foreach ($list as $k => $v) {
-            $list[$k]['drug_type']   = strval($drugTypeEnum[$v['drug_type']]);
-            $list[$k]['dosage_type'] = intval($drugDosageEnum[$v['dosage_type']]);
-        }
-        unset($drugTypeEnum, $drugDosageEnum);
-        return $list;
-    }
-
-    /**
      * 获取信息
      * @return array
      */
@@ -274,20 +258,13 @@ class DrugModel extends Crud {
      * 获取列表
      * @return array
      */
-    public function getDrugList ($user_id, array $post)
+    public function getDrugList (array $post)
     {
         $post['page_size'] = max(6, $post['page_size']);
         $post['name']      = trim_space($post['name']);
 
-        // 用户获取
-        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
-
         $condition = [
-            'clinic_id' => $userInfo['clinic_id']
+            'clinic_id' => $this->userInfo['clinic_id']
         ];
         if (!is_null(CommonStatus::format($post['status']))) {
             $condition['status'] = $post['status'];

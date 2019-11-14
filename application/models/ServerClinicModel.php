@@ -206,6 +206,33 @@ class ServerClinicModel extends Crud {
     }
 
     /**
+     * 搜索批次
+     * @return array
+     */
+    public function searchBatch ($post)
+    {
+        $post['clinic_id'] = intval($post['clinic_id']);
+        $post['name']      = trim_space($post['name']);
+        if (!$post['clinic_id'] || !$post['name']) {
+            return success([]);
+        }
+        if (!$list = (new StockModel(null, $post['clinic_id']))->searchBatch($post)) {
+            return success([]);
+        }
+        return success([
+            'columns' => [
+                ['key' => 'name', 'value' => '名称'],
+                ['key' => 'package_spec', 'value' => '规格'],
+                ['key' => 'amount_unit', 'value' => '库存'],
+                ['key' => 'purchase_price', 'value' => '购入价'],
+                ['key' => 'batch_number', 'value' => '批号'],
+                ['key' => 'manufactor_name', 'value' => '生产商']
+            ],
+            'rows' => $list
+        ]);
+    }
+
+    /**
      * 搜索药品
      * @return array
      */
@@ -217,7 +244,7 @@ class ServerClinicModel extends Crud {
             return success([]);
         }
         $post['drug_type'] = $post['drug_type'] == DrugType::WESTERN ? [DrugType::WESTERN, DrugType::NEUTRAL] : intval($post['drug_type']);
-        if (!$list = (new DrugModel())->search($post)) {
+        if (!$list = (new DrugModel(null, $post['clinic_id']))->search($post)) {
             return success([]);
         }
         return success([
@@ -244,7 +271,7 @@ class ServerClinicModel extends Crud {
             return success([]);
         }
         $drugType = $post['drug_type'] == DrugType::WESTERN ? ['西药', '中成药'] : '草药';
-        if (!$list = (new DrugModel())->searchDict($drugType, $post['name'])) {
+        if (!$list = (new DrugDictModel())->searchDict($drugType, $post['name'])) {
             return success([]);
         }
         $columns = [

@@ -1,23 +1,21 @@
 <?php
 /**
- * 订单状态
+ * 处方状态
  */
 
 namespace app\common;
 
-class OrderStatus
+class NoteStatus
 {
 
-    const NOPAY       = 0;
-    const PAY         = 1;
-    const PART_REFUND = 2;
-    const FULL_REFUND = 3;
+    const NOPAY  = 0;
+    const PAY    = 1;
+    const REFUND = 2;
 
     static $message = [
-        0 => '未收费',
-        1 => '已收费',
-        2 => '部分退费',
-        3 => '全退费',
+        0 => '未付费',
+        1 => '已付费',
+        2 => '已退费'
     ];
 
     public static function format ($code)

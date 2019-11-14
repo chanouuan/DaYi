@@ -39,18 +39,30 @@ class PayFlowModel extends Crud {
      * @param $flow_type 操作类型
      * @param $clinic_id 诊所id
      * @param $order_id 订单id
-     * @param $payway 付款方式
+     * @param $payway 付款方式/退款方式
      * @param $money 付款金额/退款金额
      * @param $second_payway 第二种付款方式
      * @param $second_money 第二种付款金额
      * @param $remark 备注
      * @return bool
      */
-    public function insert ($flow_type, $clinic_id, $order_id, $payway, $money, $second_payway = null, $second_money = null, $remark = null)
+    public function insert ($flow_type, $clinic_id, $order_id, $payway, $money = null, $second_payway = null, $second_money = null, $remark = null)
     {
         if ($flow_type == OrderPayFlow::REFUND) {
             $second_payway = null;
             $second_money  = null;
+            if (empty($payway)) {
+                // 默认退款方式为原路退款
+                if (!$charges = $this->select(['clinic_id' => $clinic_id, 'order_id'  => $order_id, 'flow_type' => OrderPayFlow::CHARGE], 'money,payway')) {
+                    return false;
+                }
+                if (isset($charges[0])) {
+                    list($money, $payway) = $charges[0];
+                }
+                if (isset($charges[1])) {
+                    list($second_money, $second_payway) = $charges[1];
+                }
+            }
         }
 
         $data = [

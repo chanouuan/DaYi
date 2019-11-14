@@ -15,6 +15,8 @@ use app\common\OrderPayWay;
 use app\common\OrderSource;
 use app\common\OrderStatus;
 use app\common\GenerateCache;
+use app\common\StockType;
+use app\common\NoteStatus;
 use Crud;
 
 class DoctorOrderModel extends Crud {
@@ -116,7 +118,7 @@ class DoctorOrderModel extends Crud {
         $post = $post['result'];
 
         // 生成会诊单
-        if (!$orderId = $this->getDb()->transaction(function ($db) use($post) {
+        if (!$orderId = $this->getDb()->transaction(function ($db) use ($post) {
             // 新增订单
             if (!$orderId = $db->insert([
                 'clinic_id'      => $this->userInfo['clinic_id'],
@@ -152,6 +154,83 @@ class DoctorOrderModel extends Crud {
     }
 
     /**
+     * 线下退费
+     * @return array
+     */
+    public function localRefund (array $post)
+    {
+        $post['order_id'] = intval($post['order_id']);
+        $post['payway']   = OrderPayWay::isLocalPayWay($post['payway']) ? $post['payway'] : null;
+        $post['remark']   = trim_space($post['remark']);
+        $post['notes']    = array_filter(array_unique(get_short_array($post['notes'])));
+
+        if (empty($post['notes'])) {
+            return error('请选择退费项目');
+        }
+
+        // 获取订单
+        if (!$orderInfo = $this->find(['id' => $post['order_id'], 'clinic_id' => $this->userInfo['clinic_id'], 'status' => ['in', [OrderStatus::PAY, OrderStatus::PART_REFUND]]], 'pay,discount,stock_id')) {
+            return error('该订单不能退费');
+        }
+
+        // 获取处方笺
+        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::PAY])->field('id,category,relation_id,total_amount,dose,price')->select()) {
+            return error('处方不存在');
+        }
+
+        // 部分退费或全退费
+        $orderStatus = OrderStatus::FULL_REFUND;
+        foreach ($notes as $k => $v) {
+            if (!in_array($v['id'], $post['notes'])) {
+                $orderStatus = OrderStatus::PART_REFUND;
+                unset($notes[$k]);
+            }
+        }
+        if (empty($notes)) {
+            return error('退费项目为空');
+        }
+        // 有优惠的订单，不支持单项退费
+        if ($orderInfo['discount'] && $orderStatus !== OrderStatus::FULL_REFUND) {
+            return error('该笔收费存在优惠金额，不支持单项退费！');
+        }
+        // 计算退款金额
+        $refundPrice = $orderInfo['discount'] ? $orderInfo['pay'] : $this->totalMoney($notes);
+        $notes = $this->totalAmount($notes);
+
+        if (!$this->getDb()->transaction(function ($db) use ($post, $orderInfo, $notes, $orderStatus, $refundPrice) { 
+            // 更新订单已退费
+            if (!$this->getDb()->where(['id' => $post['order_id'], 'status' => ['in', [OrderStatus::PAY, OrderStatus::PART_REFUND]]])->update([
+                'status'      => $orderStatus,
+                'refund'      => ['refund+' . $refundPrice],
+                'update_time' => date('Y-m-d H:i:s', TIMESTAMP)
+            ])) {
+                return false;
+            }
+            // 更新处方状态
+            if (!$this->getDb()
+                    ->table('dayi_order_notes')
+                    ->where(['id' => ['in', $post['notes']], 'clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::PAY])
+                    ->update(['status' => NoteStatus::REFUND])) {
+                return false;
+            }
+            // 加药品库存
+            if (!(new DrugModel(null, $this->userInfo['clinic_id']))->updateAmount($this->userInfo['clinic_id'], StockType::PULL, $notes)) {
+                return false;
+            }
+            // 自动退药
+            if (!(new StockModel(null, $this->userInfo['clinic_id']))->backDrug($this->userInfo['clinic_id'], $orderInfo['stock_id'], $notes)) {
+                return false;
+            }
+            // 添加资金流水
+            return (new PayFlowModel(['link' => $this->link, 'partition' => $this->partition]))->insert(OrderPayFlow::REFUND, $this->userInfo['clinic_id'], $post['order_id'], $post['payway'], $refundPrice, null, null, $post['remark']);
+        })) {
+            return error('保存订单失败');
+        }
+
+        return success('ok');
+    }
+
+    /**
      * 线下收费
      * @return array
      */
@@ -176,7 +255,7 @@ class DoctorOrderModel extends Crud {
             return error('本次会诊已结束');
         }
 
-        // 计算优惠金额
+        // 计算优惠后的金额
         $discount = Royalty::getDiscountMoney($post['discount_type'], $post['discount_val'], $orderInfo['pay']);
 
         // 验证实付金额是否等于应付金额
@@ -185,31 +264,45 @@ class DoctorOrderModel extends Crud {
         }
 
         // 获取处方笺
-        if (false === ($notes = $this->getDb()->table('dayi_order_notes')->where(['order_id' => $post['order_id']])->field('id,category,relation_id,total_amount,dose')->select())) {
-            return error('数据异常，请重新操作');
+        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id']])->field('id,category,relation_id,total_amount,dose')->select()) {
+            return error('处方不存在');
         }
+        $notes = $this->totalAmount($notes);
 
-        if (!$this->getDb()->transaction(function ($db) use($orderInfo, $discount, $notes, $post) {
+        if (!$this->getDb()->transaction(function ($db) use ($orderInfo, $discount, $notes, $post) {
+            // 自动发药
+            if (!$stockId = (new StockModel(null, $this->userInfo['clinic_id']))->putDrug($this->userInfo['clinic_id'], $notes)) {
+                return false;
+            }
             // 更新订单已收费
-            if (!$db->where(['id' => $post['order_id'], 'status' => OrderStatus::NOPAY])->update([
+            if (!$this->getDb()->where(['id' => $post['order_id'], 'status' => OrderStatus::NOPAY])->update([
                 'pay'            => $discount,
                 'discount'       => $orderInfo['pay'] - $discount,
                 'charge_user_id' => $this->userInfo['id'],
                 'print_code'     => null,
                 'payway'         => $post['second_payway'] ? OrderPayWay::MULTIPAY : $post['payway'],
                 'status'         => OrderStatus::PAY,
+                'stock_id'       => is_int($stockId) ? $stockId : null,
                 'update_time'    => date('Y-m-d H:i:s', TIMESTAMP)
             ])) {
                 return false;
             }
-            // 减库存
-            return (new DrugModel())->updateAmount($this->userInfo['clinic_id'], '-', $this->totalAmount($notes));
+            // 更新处方状态
+            if (!$this->getDb()
+                    ->table('dayi_order_notes')
+                    ->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::NOPAY])
+                    ->update(['status' => NoteStatus::PAY])) {
+                return false;
+            }
+            // 减药品库存
+            if (!(new DrugModel(null, $this->userInfo['clinic_id']))->updateAmount($this->userInfo['clinic_id'], StockType::PUSH, $notes)) {
+                return false;
+            }
+            // 添加资金流水
+            return (new PayFlowModel(['link' => $this->link, 'partition' => $this->partition]))->insert(OrderPayFlow::CHARGE, $this->userInfo['clinic_id'], $post['order_id'], $post['payway'], $post['money'], $post['second_payway'], $post['second_money'], $post['remark']);
         })) {
-            return error('保存订单失败');
+            return error('保存订单失败，请检查库存');
         }
-
-        // 添加资金流水
-        (new PayFlowModel(['link' => $this->link, 'partition' => $this->partition]))->insert(OrderPayFlow::CHARGE, $this->userInfo['clinic_id'], $post['order_id'], $post['payway'], $post['money'], $post['second_payway'], $post['second_money'], $post['remark']);
 
         return success('ok');
     }
@@ -447,7 +540,7 @@ class DoctorOrderModel extends Crud {
             return error('数据异常，请重新操作');
         }
 
-        if (!$this->getDb()->transaction(function ($db) use($post, $notes) {
+        if (!$this->getDb()->transaction(function ($db) use ($post, $notes) {
             // 编辑会诊单
             if (!$db->where(['id' => $post['order_id'], 'status' => OrderStatus::NOPAY])->update([
                 'patient_id'        => $post['patient_id'],
@@ -505,7 +598,7 @@ class DoctorOrderModel extends Crud {
         }
 
         // 生成会诊单
-        if (!$orderId = $this->getDb()->transaction(function ($db) use($post, $printCode) {
+        if (!$orderId = $this->getDb()->transaction(function ($db) use ($post, $printCode) {
             // 新增订单
             if (!$orderId = $db->insert([
                 'clinic_id'         => $this->userInfo['clinic_id'],
@@ -721,7 +814,7 @@ class DoctorOrderModel extends Crud {
             $dose = 0;
         }
 
-        $drugModel      = new DrugModel();
+        $drugModel      = new DrugModel(null, $clinic_id);
         $treatmentModel = new TreatmentModel();
 
         // 获取药品
@@ -756,8 +849,7 @@ class DoctorOrderModel extends Crud {
                     'drug_days'     => $v['drug_days'],
                     'price'         => $v['total_amount'] * $list[1][$v['relation_id']]['retail_price'],
                     'remark'        => null,
-                    'dose'          => $dose,
-                    'create_time'   => date('Y-m-d H:i:s', TIMESTAMP)
+                    'dose'          => $dose
                 ];
             } else {
                 // 诊疗
@@ -775,8 +867,7 @@ class DoctorOrderModel extends Crud {
                     'drug_days'     => null,
                     'price'         => $v['total_amount'] * $list[2][$v['relation_id']]['price'],
                     'remark'        => $v['remark'],
-                    'dose'          => $dose,
-                    'create_time'   => date('Y-m-d H:i:s', TIMESTAMP)
+                    'dose'          => $dose
                 ];
             }
         }
