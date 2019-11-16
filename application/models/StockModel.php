@@ -224,13 +224,12 @@ class StockModel extends Crud {
     public function searchBatch (array $post, $limit = 5)
     {
         // 搜索药品
-        $post['clinic_id']  = $this->userInfo['clinic_id'];
-        $post['is_procure'] = 1；
-        if (!$drugs = (new DrugModel(null, $this->userInfo['clinic_id']))->search($post, 'id', $limit)) {
+        $post['is_procure'] = 1;
+        if (!$drugs = (new DrugModel(null, $post['clinic_id']))->search($post, 'id', $limit)) {
             return [];
         }
 
-        if (!$batches = $this->getBatchDetail(['clinic_id' => $this->userInfo['clinic_id'], 'drug_id' => ['in', array_column($drugs, 'id')]])) {
+        if (!$list = $this->getBatchDetail(['clinic_id' => $post['clinic_id'], 'drug_id' => ['in', array_column($drugs, 'id')]])) {
             return [];
         }
 
@@ -409,7 +408,7 @@ class StockModel extends Crud {
         }
 
         unset($batches);
-        return handleInsert($list);
+        return $this->handleInsert($list);
     }
 
     /**
@@ -475,7 +474,7 @@ class StockModel extends Crud {
         }
 
         unset($batches);
-        return handleInsert($list);
+        return $this->handleInsert($list);
     }
 
     /**
@@ -664,8 +663,7 @@ class StockModel extends Crud {
                 'amount'          => $v['amount'],
                 'purchase_price'  => $v['purchase_price'],
                 'batch_number'    => $v['batch_number'],
-                'valid_time'      => $v['valid_time'],
-                'create_time'     => date('Y-m-d H:i:s', TIMESTAMP)
+                'valid_time'      => $v['valid_time']
             ];
         }
 

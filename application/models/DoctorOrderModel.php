@@ -174,7 +174,7 @@ class DoctorOrderModel extends Crud {
         }
 
         // 获取处方笺
-        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::PAY])->field('id,category,relation_id,total_amount,dose,price')->select()) {
+        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::PAY])->field('id,category,relation_id,total_amount,dose,unit_price')->select()) {
             return error('处方不存在');
         }
 
@@ -334,7 +334,7 @@ class DoctorOrderModel extends Crud {
     {
         $order_id = intval($order_id);
 
-        if (!$orderInfo = $this->find(['id' => $order_id, 'clinic_id' => $this->userInfo['clinic_id']], 'id,doctor_id,enum_source,print_code,patient_name,patient_tel,patient_gender,patient_age,patient_complaint,patient_allergies,patient_diagnosis,note_dose,note_side,advice,voice,pay,discount,payway,status,create_time')) {
+        if (!$orderInfo = $this->find(['id' => $order_id, 'clinic_id' => $this->userInfo['clinic_id']], 'id,doctor_id,enum_source,print_code,patient_name,patient_tel,patient_gender,patient_age,patient_complaint,patient_allergies,patient_diagnosis,note_dose,note_side,advice,voice,pay,discount,refund,payway,status,create_time')) {
             return error('订单不存在');
         }
 
@@ -359,10 +359,10 @@ class DoctorOrderModel extends Crud {
 
         // 获取处方笺
         $orderInfo['notes'] = [];
-        if ($orderInfo['patient_name'] || $orderInfo['enum_source'] == OrderSource::BUY_DRUG) {
-            $orderInfo['notes'] = $this->getDb()->table('dayi_order_notes')->where(['order_id' => $order_id])->field('id,category,relation_id,name,package_spec,dispense_unit,dosage_unit,single_amount,total_amount,usages,frequency,drug_days,dose,remark,price')->order('id')->select();
+        if ($orderInfo['pay']) {
+            $orderInfo['notes'] = $this->getDb()->table('dayi_order_notes')->where(['order_id' => $order_id])->field('id,category,relation_id,name,package_spec,dispense_unit,dosage_unit,single_amount,total_amount,usages,frequency,drug_days,dose,remark,unit_price,back_amount')->order('id')->select();
             foreach ($orderInfo['notes'] as $k => $v) {
-                $orderInfo['notes'][$k]['price'] = round_dollar($v['price']);
+                $orderInfo['notes'][$k]['unit_price'] = round_dollar($v['unit_price']);
                 if (NoteUsage::format($v['usages'])) {
                     $orderInfo['notes'][$k]['usages_name'] = NoteUsage::getMessage($v['usages']);
                 }
@@ -503,9 +503,9 @@ class DoctorOrderModel extends Crud {
         $count = $this->count($condition);
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, 5);
-            $list = $this->select($condition, 'id,patient_name,patient_gender,create_time,status', 'id desc', $pagesize['limitstr']);
+            $list = $this->select($condition, 'id,print_code,patient_name,patient_gender,create_time,status', 'id desc', $pagesize['limitstr']);
             foreach ($list as $k => $v) {
-                $list[$k]['create_time'] = substr($v['create_time'], 0, 16);
+                $list[$k]['create_time'] = substr($v['create_time'], 11, 5);
             }
         }
 
@@ -734,7 +734,7 @@ class DoctorOrderModel extends Crud {
     {
         $total = 0;
         foreach ($notes as $k => $v) {
-            $price = $v['price'];
+            $price = $v['unit_price'] * $v['total_amount']; // 单价 * 总量
             if ($v['category'] == NoteCategory::CHINESE) {
                 $price *= $v['dose']; // 草药剂量
             }
@@ -847,7 +847,7 @@ class DoctorOrderModel extends Crud {
                     'usages'        => $v['usages'],
                     'frequency'     => $v['frequency'],
                     'drug_days'     => $v['drug_days'],
-                    'price'         => $v['total_amount'] * $list[1][$v['relation_id']]['retail_price'],
+                    'unit_price'    => $list[1][$v['relation_id']]['retail_price'],
                     'remark'        => null,
                     'dose'          => $dose
                 ];
@@ -865,7 +865,7 @@ class DoctorOrderModel extends Crud {
                     'usages'        => null,
                     'frequency'     => null,
                     'drug_days'     => null,
-                    'price'         => $v['total_amount'] * $list[2][$v['relation_id']]['price'],
+                    'unit_price'    => $list[2][$v['relation_id']]['price'],
                     'remark'        => $v['remark'],
                     'dose'          => $dose
                 ];

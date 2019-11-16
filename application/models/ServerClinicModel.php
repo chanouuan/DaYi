@@ -20,16 +20,16 @@ class ServerClinicModel extends Crud {
      * 获取出入库方式
      * @return array
      */
-    public function getStockWayEnum ()
+    public function getStockWayEnum ($all = false)
     {
         $list = [];
-        foreach (StockWay::getPull() as $k => $v) {
+        foreach (StockWay::getPull($all) as $k => $v) {
             $list[StockType::PULL][] = [
                 'id' => $k,
                 'name' => $v
             ];
         }
-        foreach (StockWay::getPush() as $k => $v) {
+        foreach (StockWay::getPush($all) as $k => $v) {
             $list[StockType::PUSH][] = [
                 'id' => $k,
                 'name' => $v

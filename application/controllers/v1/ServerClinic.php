@@ -29,6 +29,7 @@ class ServerClinic extends ActionPDO {
             'saveDoctorCard'       => ['interval' => 1000],
             'printTemplete'        => ['interval' => 1000],
             'buyDrug'              => ['interval' => 1000],
+            'localRefund'          => ['interval' => 2000],
             'localCharge'          => ['interval' => 2000],
             'getMessageCount'      => ['interval' => 1000],
             'getDrugList'          => ['interval' => 200],
@@ -66,6 +67,7 @@ class ServerClinic extends ActionPDO {
             // 重命名
             $map = [
                 'getTodayOrderList'  => 'createDoctorCard',
+                'localRefund'        => 'localCharge',
                 'getDoctorOrderList' => 'saveDoctorCard',
                 'getDrugList'        => 'saveDrug',
                 'getTreatmentList'   => 'saveDrug',
@@ -421,6 +423,25 @@ class ServerClinic extends ActionPDO {
     }
 
     /**
+     * 线下退费
+     * @login
+     * @param *order_id 订单ID
+     * @param payway 退费方式
+     * @param notes 退费单项
+     * @param remark 备注
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function localRefund ()
+    {
+        return (new DoctorOrderModel($this->_G['user']['user_id']))->localRefund($_POST);
+    }
+
+    /**
      * 搜索患者
      * @param *name 患者姓名
      * @return array
@@ -708,7 +729,7 @@ class ServerClinic extends ActionPDO {
      */
     public function saveDrug ()
     {
-        return (new DrugModel($this->_G['user']['user_id'], ))->saveDrug($_POST);
+        return (new DrugModel($this->_G['user']['user_id']))->saveDrug($_POST);
     }
 
     /**
@@ -724,7 +745,7 @@ class ServerClinic extends ActionPDO {
      */
     public function getDrugInfo ()
     {
-        return success((new DrugModel($this->_G['user']['user_id'], ))->getDrugInfo(getgpc('id')));
+        return success((new DrugModel($this->_G['user']['user_id']))->getDrugInfo(getgpc('id')));
     }
 
     /**
@@ -932,7 +953,7 @@ class ServerClinic extends ActionPDO {
      */
     public function getStockWayEnum ()
     {
-        return (new ServerClinicModel())->getStockWayEnum();
+        return (new ServerClinicModel())->getStockWayEnum(getgpc('all'));
     }
 
     /**

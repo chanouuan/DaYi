@@ -483,7 +483,7 @@ class DbMysql extends Db {
     private function rollBackTrans ()
     {
         if ($this->_db->inTransaction()) {
-            DebugLog::_mysql(null, '#rollBack');
+            DebugLog::_mysql(null, '#back');
             return $this->_db->rollBack();
         }
         return true;

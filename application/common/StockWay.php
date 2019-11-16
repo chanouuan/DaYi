@@ -24,7 +24,7 @@ class StockWay
         32 => '报损出库',
         33 => '调拨出库',
         34 => '赠品',
-        35 => '其他出库'
+        35 => '其他出库',
         36 => '自动发药'
     ];
 
@@ -32,11 +32,14 @@ class StockWay
      * 获取入库方式
      * @return array
      */
-    public static function getPull ()
+    public static function getPull ($all = false)
     {
         $list = [];
         foreach (self::$message as $k => $v) {
-            if ($k < 30 && $k != self::AUTO_BACK) {
+            if ($k < 30) {
+                if (!$all && $k == self::AUTO_BACK) {
+                    continue;
+                }
                 $list[$k] = $v;
             } else {
                 break;
@@ -49,11 +52,14 @@ class StockWay
      * 获取出库方式
      * @return array
      */
-    public static function getPush ()
+    public static function getPush ($all = false)
     {
         $list = [];
         foreach (self::$message as $k => $v) {
-            if ($k > 29 && $k != self::AUTO_PUT) {
+            if ($k > 29) {
+                if (!$all && $k == self::AUTO_PUT) {
+                    continue;
+                }
                 $list[$k] = $v;
             }
         }
