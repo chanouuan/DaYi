@@ -43,16 +43,22 @@ class Controller {
     public function pathinfo()
     {
         // 分析PATHINFO信息
-        if (!isset($_SERVER['PATH_INFO'])) {
+        $pathinfo = $_SERVER['PATH_INFO'];
+        if (is_null($pathinfo)) {
             foreach (['ORIG_PATH_INFO', 'REDIRECT_PATH_INFO', 'REDIRECT_URL'] as $type) {
-                if (!empty($_SERVER[$type])) {
-                    $_SERVER['PATH_INFO'] = (0 === strpos($_SERVER[$type], $_SERVER['SCRIPT_NAME'])) ?
-                        substr($_SERVER[$type], strlen($_SERVER['SCRIPT_NAME'])) : $_SERVER[$type];
+                if (isset($_SERVER[$type])) {
+                    $pathinfo = (0 === strpos($_SERVER[$type], $_SERVER['SCRIPT_NAME'])) ? substr($_SERVER[$type], strlen($_SERVER['SCRIPT_NAME'])) : $_SERVER[$type];
                     break;
                 }
             }
+            if (is_null($pathinfo)) {
+                $pathinfo = $_SERVER['REQUEST_URI'];
+                if (false !== ($pos = strpos($_SERVER['REQUEST_URI'], '?'))) {
+                    $pathinfo = substr($_SERVER['REQUEST_URI'], 0, $pos);
+                }
+            }
         }
-        return empty($_SERVER['PATH_INFO']) ? '/' : ltrim($_SERVER['PATH_INFO'], '/');
+        return empty($pathinfo) ? '/' : ltrim($pathinfo, '/');
     }
 
     public function method($method = false)

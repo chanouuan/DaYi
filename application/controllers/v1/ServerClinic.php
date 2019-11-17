@@ -4,6 +4,7 @@ namespace app\controllers;
 
 use ActionPDO;
 use app\models\AdminModel;
+use app\models\UserModel;
 use app\models\DoctorOrderModel;
 use app\models\TreatmentModel;
 use app\models\DrugModel;
@@ -20,6 +21,7 @@ class ServerClinic extends ActionPDO {
     {
         return [
             'login'                => ['interval' => 1000],
+            'sendSms'              => ['rule' => '5|10|20', 'interval' => 1000],
             'logout'               => ['interval' => 1000],
             'getUserProfile'       => ['interval' => 1000],
             'createDoctorCard'     => ['interval' => 1000],
@@ -166,6 +168,21 @@ class ServerClinic extends ActionPDO {
             'username'  => $_POST['username'],
             'password'  => strval($_POST['password'])
         ]);
+    }
+
+    /**
+     * 发送短信验证码
+     * @param *telephone 手机号
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function sendSms () 
+    {
+        return (new UserModel())->sendSmsCode($_POST);
     }
 
     /**

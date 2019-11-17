@@ -524,63 +524,76 @@ function str_conver ($str, $in_charset = 'GBK', $out_charset = 'UTF-8')
     return iconv($in_charset, $out_charset, $str);
 }
 
-function https_request ($url, $post = null, $headers = null, $timeout = 3, $encode = 'json', $reload = 1, &$httpCode = null, $st = 0)
+function https_request (array $data)
 {
-    $st = $st ? $st : microtime(true);
-    $curl = curl_init();
-    curl_setopt($curl, CURLOPT_URL, $url);
-    curl_setopt($curl, CURLOPT_TIMEOUT, $timeout);
+    $data['timeout'] = isset($data['timeout']) ? $data['timeout'] : 3;
+    $data['encode'] = isset($data['encode']) ? $data['encode'] : 'json';
+    $data['reload'] = isset($data['reload']) ? $data['reload'] : 1;
+    $data['st'] = isset($data['st']) ? $data['st'] : microtime(true);
+
+    $curl = \curl_init();
+    curl_setopt($curl, CURLOPT_URL, $data['url']);
+    curl_setopt($curl, CURLOPT_TIMEOUT, $data['timeout']);
     curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, FALSE);
     curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, FALSE);
     curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
-    if ($headers) {
-        if (!isset($headers[0])) {
-            foreach ($headers as $k => $v) {
-                $headers[$k] = $k . ':' . $v;
+    if (isset($data['headers'])) {
+        if (!isset($data['headers'][0])) {
+            foreach ($data['headers'] as $k => $v) {
+                $data['headers'][$k] = $k . ':' . $v;
             }
         }
-        curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, $data['headers']);
     }
-    if ($post) {
+    if (isset($data['post'])) {
         curl_setopt($curl, CURLOPT_CUSTOMREQUEST, 'POST');
-        curl_setopt($curl, CURLOPT_POSTFIELDS, is_array($post) ? http_build_query($post) : $post);
+        curl_setopt($curl, CURLOPT_POSTFIELDS, is_array($data['post']) ? http_build_query($data['post']) : $data['post']);
     }
+
     $reponse = curl_exec($curl);
+
     if (curl_errno($curl)) {
-        if ($reload > 0) {
+        if ($data['reload'] > 0) {
             curl_close($curl);
-            return https_request($url, $post, $headers, $timeout, $encode, $reload - 1, $httpCode, $st);
+            $data['reload'] = $data['reload'] - 1;
+            return https_request($data);
         }
         $error = curl_error($curl);
         \DebugLog::_log([
             '[Args] ' . json_unicode_encode(func_get_args()),
             '[Info] ' . json_unicode_encode(curl_getinfo($curl)),
             '[Fail] ' . $error,
-            '[Time] ' . round(microtime(true) - $st, 3) . 's'
+            '[Time] ' . round(microtime(true) - $data['st'], 3) . 's'
         ], 'curlerror');
         curl_close($curl);
         throw new \Exception($error);
     }
+
     $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
     curl_close($curl);
-    \DebugLog::_curl($url, $headers, $post, round(microtime(true) - $st, 3), $reponse);
-    if ($encode == 'json') {
-        if (!$reponse) {
-            return [];
+
+    \DebugLog::_curl($data['url'], $data['headers'], $data['post'], round(microtime(true) - $data['st'], 3), $reponse);
+    
+    if ($reponse) {
+        if ($data['encode'] == 'json') {
+            $reponse = json_decode($reponse, true);
+        } else if ($data['encode'] == 'xml') {
+            $reponse = simplexml_load_string($reponse);
+        } else if ($data['encode'] == 'object') {
+            $reponse = json_decode($reponse);
         }
-        return json_decode($reponse, true);
-    } else if ($encode == 'xml') {
-        if (!$reponse) {
-            return [];
-        }
-        return simplexml_load_string($reponse);
     }
-    return $reponse;
+    
+    return [
+        'http_code' => $httpCode,
+        'data' => $reponse
+    ];
 }
 
 function http_multi_exec (Closure $addHandle, $return)
 {
-    $mh = curl_multi_init();
+    $mh = \curl_multi_init();
     $curls = $addHandle($mh);
 
     if (empty($curls)) {

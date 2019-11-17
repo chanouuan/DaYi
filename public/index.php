@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
 define('APPLICATION_PATH', dirname(__DIR__));
 define('APPLICATION_URL', rtrim(implode('', [$_SERVER['REQUEST_SCHEME'], '://', $_SERVER['HTTP_HOST'], str_replace('index.php', '', $_SERVER['SCRIPT_NAME'])]), '/'));
 define('TIMESTAMP', $_SERVER['REQUEST_TIME']);
-define('MICROTIME', microtime(true));
+define('MICROTIME', isset($_SERVER['REQUEST_TIME_FLOAT']) ? $_SERVER['REQUEST_TIME_FLOAT'] : microtime(true));
 define('DEBUG_PASS', '__debug');
 define('DEBUG_LEVEL', 3);
 if (isset($_SERVER['HTTP_APIVERSION'])) {

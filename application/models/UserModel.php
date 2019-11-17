@@ -78,4 +78,154 @@ class UserModel extends Crud {
         return password_verify($pwd, $hash);
     }
 
+    /**
+     * 验证图片验证码
+     * @return bool
+     */
+    public function checkImgCode ($code, $keep = true)
+    {
+        if (!preg_match("/^[0-9]{4,6}$/", $code)) {
+            return false;
+        }
+        $name = sprintf("%u", ip2long(get_ip()));
+        if ($keep) {
+            return $this->getDb()->table('__tablepre__smscode')->where(['tel' => $name, 'code' => $code])->count();
+        }
+        return $this->getDb()->table('__tablepre__smscode')->where(['tel' => $name, 'code' => $code])->delete();
+    }
+
+    /**
+     * 验证短信验证码
+     * @return bool
+     */
+    public function checkSmsCode ($telephone, $code)
+    {
+        if (!preg_match("/^1[0-9]{10}$/", $telephone) || !preg_match("/^[0-9]{4,6}$/", $code)) {
+            return false;
+        }
+        // 处理逻辑为同一个验证码5分钟内可以验证通过10次
+        if (!$result = $this->getDb()
+            ->field('id, code, errorcount, sendtime')
+            ->table('__tablepre__smscode')
+            ->where('tel = ?')
+            ->bindValue($telephone)
+            ->find()) {
+            return false;
+        }
+        if ($result['errorcount'] <= 10) {
+            // 累计次数
+            $this->getDb()->table('__tablepre__smscode')->where('id = ' . $result['id'])->update([
+                'errorcount' => ['errorcount+1']
+            ]);
+        }
+        return $result['code'] == $code
+            && $result['errorcount'] <= 10
+            && $result['sendtime'] > (TIMESTAMP - 300);
+    }
+
+    /**
+     * 重置短信验证码
+     * @return bool
+     */
+    public function resetSmsCode ($telephone)
+    {
+        return $this->getDb()->table('__tablepre__smscode')->where(['tel' => $telephone])->delete();
+    }
+
+    /**
+     * 保存图片验证码
+     * @return array
+     */
+    public function saveImgCode ($code)
+    {
+        $name = sprintf("%u", ip2long(get_ip()));
+        $result = $this->getDb()->table('__tablepre__smscode')->field('id')->where(['tel' => $name])->find();
+        if (!$result) {
+            if (!$this->getDb()->table('__tablepre__smscode')->insert([
+                'tel' => $name, 'code' => $code
+            ])) {
+                return error('error');
+            }
+        } else {
+            if (false === $this->getDb()->table('__tablepre__smscode')->where(['tel' => $name])->update([
+                'code' => $code
+            ])) {
+                return error('error');
+            }
+        }
+        return success('ok');
+    }
+
+    /**
+     * 发送短信验证码
+     * @return array
+     */
+    public function sendSmsCode ($post)
+    {
+        if (!validate_telephone($post['telephone'])) {
+            return error('手机号为空或格式错误');
+        }
+
+        // 验证码长度
+        $len = isset($post['len']) && $post['len'] ? $post['len'] : 6;
+        $len = $len >= 4 && $len <= 6 ? $len : 6;
+        $arr = range(1, $len);
+        foreach ($arr as $k => $v) {
+            $arr[$k] = (rand() % 10);
+        }
+        $code = implode('', $arr);
+
+        $resultSms = $this->getDb()
+            ->table('__tablepre__smscode')
+            ->field('id,sendtime,hour_fc,day_fc')
+            ->where('tel = ?')
+            ->bindValue($post['telephone'])
+            ->find();
+
+        if (!$resultSms) {
+            $resultSms = [
+                'tel' => $post['telephone']
+            ];
+            if (!$resultSms['id'] = $this->getDb()->table('__tablepre__smscode')->insert(['tel' => $post['telephone']], null, true)) {
+                return error('发送失败');
+            }
+        }
+
+        $params = [
+            'code' => $code,
+            'errorcount' => 0,
+            'sendtime' => TIMESTAMP,
+            'hour_fc' => 1,
+            'day_fc' => 1
+        ];
+
+        if ($resultSms['sendtime']) {
+            // 限制发送频率
+            if ($resultSms['sendtime'] + 10 > TIMESTAMP) {
+                return error('验证码已发送,请稍后再试');
+            }
+            if (date('YmdH', $resultSms['sendtime']) == date('YmdH', TIMESTAMP)) {
+                // 触发时级流控
+                if ($resultSms['hour_fc'] >= getSysConfig('hour_fc')) {
+                    return error('本时段发送次数已达上限');
+                }
+                $params['hour_fc'] = ['hour_fc+1'];
+            }
+            if (date('Ymd', $resultSms['sendtime']) == date('Ymd', TIMESTAMP)) {
+                // 触发天级流控
+                if ($resultSms['day_fc'] >= getSysConfig('day_fc')) {
+                    return error('今日发送次数已达上限');
+                }
+                $params['day_fc'] = ['day_fc+1'];
+            }
+        }
+
+        if (!$this->getDb()->table('__tablepre__smscode')->where(['id = ' . $resultSms['id'], 'hour_fc <= ' . getSysConfig('hour_fc'), 'day_fc <= ' . getSysConfig('day_fc')])->update($params)) {
+            return error('发送失败');
+        }
+
+        // 发送短信
+        return (new \app\library\AliSmsHelper())->sendSms('扶桑云医', 'SMS_133971610', $post['telephone'], ['code' => $code]);
+    }
+
 }
