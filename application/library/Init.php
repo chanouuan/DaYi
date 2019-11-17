@@ -250,7 +250,7 @@ abstract class ActionPDO {
             preg_match('/@route(.+)/', $method_doc, $matches);
             $docList[$v->name]['url'] = gurl($matches[1] ? trim($matches[1]) : (lcfirst($this->_module) . '/' . $v->name));
 
-            preg_match('/(.+)[^\n]/', $method_doc, $matches);
+            preg_match('/(.+)(^\n)?/', $method_doc, $matches);
             $docList[$v->name]['name'] = isset($matches[1]) ? trim($matches[1]) : '';
 
             preg_match('/@description(.+)/', $method_doc, $matches);
