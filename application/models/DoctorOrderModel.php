@@ -162,7 +162,8 @@ class DoctorOrderModel extends Crud {
         $post['order_id'] = intval($post['order_id']);
         $post['payway']   = OrderPayWay::isLocalPayWay($post['payway']) ? $post['payway'] : null;
         $post['remark']   = trim_space($post['remark']);
-        $post['notes']    = array_filter(array_unique(get_short_array($post['notes'])));
+        // notes 格式 [{id:1,back_amount:1}]
+        $post['notes'] = $post['notes'] ? array_slice(json_decode(htmlspecialchars_decode($post['notes']), true), 0, 100) : [];
 
         if (empty($post['notes'])) {
             return error('请选择退费项目');
@@ -173,29 +174,59 @@ class DoctorOrderModel extends Crud {
             return error('该订单不能退费');
         }
 
-        // 获取处方笺
-        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::PAY])->field('id,category,relation_id,total_amount,dose,unit_price')->select()) {
-            return error('处方不存在');
+        // 获取收费项目
+        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::PAY])->field('id,category,relation_id,total_amount,dose,unit_price,back_amount')->select()) {
+            return error('收费项目不存在');
         }
 
-        // 部分退费或全退费
+        // 判断部分退费或全退费
         $orderStatus = OrderStatus::FULL_REFUND;
         foreach ($notes as $k => $v) {
-            if (!in_array($v['id'], $post['notes'])) {
+            // 退费数量不能大于总数量
+            if ($v['total_amount'] <= $v['back_amount']) {
+                unset($notes[$k]);
+                continue;
+            }
+            $have = false;
+            foreach ($post['notes'] as $kk => $vv) {
+                if ($v['id'] == $vv['id']) {
+                    $have = true;
+                    // 验证退费数量
+                    if ($vv['back_amount'] <= 0 || $vv['back_amount'] > ($v['total_amount'] - $v['back_amount'])) {
+                        $orderStatus = OrderStatus::PART_REFUND;
+                        $notes[$k]['total_amount'] = $v['total_amount'] - $v['back_amount'];
+                        break;
+                    }
+                    // 验证是否全退费
+                    if ($vv['back_amount'] != ($v['total_amount'] - $v['back_amount'])) {
+                        $orderStatus = OrderStatus::PART_REFUND;
+                    }
+                    $notes[$k]['total_amount'] = $vv['back_amount'];
+                    break;
+                }
+            }
+            if (!$have) {
                 $orderStatus = OrderStatus::PART_REFUND;
                 unset($notes[$k]);
             }
         }
+
         if (empty($notes)) {
             return error('退费项目为空');
         }
+
+        // 部分退费不支持原路退还方式
+        if (!$post['payway'] && $orderStatus === OrderStatus::PART_REFUND) {
+            return error('部分退费不支持原路退还，请选择其他退费方式！');
+        }
+
         // 有优惠的订单，不支持单项退费
         if ($orderInfo['discount'] && $orderStatus !== OrderStatus::FULL_REFUND) {
             return error('该笔收费存在优惠金额，不支持单项退费！');
         }
+
         // 计算退款金额
         $refundPrice = $orderInfo['discount'] ? $orderInfo['pay'] : $this->totalMoney($notes);
-        $notes = $this->totalAmount($notes);
 
         if (!$this->getDb()->transaction(function ($db) use ($post, $orderInfo, $notes, $orderStatus, $refundPrice) { 
             // 更新订单已退费
@@ -207,12 +238,42 @@ class DoctorOrderModel extends Crud {
                 return false;
             }
             // 更新处方状态
-            if (!$this->getDb()
-                    ->table('dayi_order_notes')
-                    ->where(['id' => ['in', $post['notes']], 'clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::PAY])
-                    ->update(['status' => NoteStatus::REFUND])) {
-                return false;
+            if ($orderStatus === OrderStatus::FULL_REFUND) {
+                // 全退费
+                if (!$this->getDb()
+                        ->table('dayi_order_notes')
+                        ->where([
+                            'id' => ['in', array_column($notes, 'id')], 
+                            'clinic_id' => $this->userInfo['clinic_id'], 
+                            'order_id' => $post['order_id'], 
+                            'status' => NoteStatus::PAY
+                        ])->update([
+                            'status' => NoteStatus::REFUND, 
+                            'back_amount' => ['=total_amount']
+                        ])) {
+                    return false;
+                }
+            } else {
+                // 部分退费
+                foreach ($notes as $k => $v) {
+                    if (!$this->getDb()
+                            ->table('dayi_order_notes')
+                            ->where([
+                                'id' => $v['id'], 
+                                'clinic_id' => $this->userInfo['clinic_id'], 
+                                'order_id' => $post['order_id'], 
+                                'status' => NoteStatus::PAY,
+                                'total_amount' => ['>=back_amount+' . $v['total_amount']]
+                            ])->update([
+                                'status' => ['if(total_amount>back_amount+' . $v['total_amount'] . ',' . NoteStatus::PAY . ',' . NoteStatus::REFUND . ')'],
+                                'back_amount' => ['=back_amount+' . $v['total_amount']]
+                            ])) {
+                        return false;
+                    }
+                }
             }
+            // 合并退费项目计算总退费数量
+            $notes = $this->totalAmount($notes);
             // 加药品库存
             if (!(new DrugModel(null, $this->userInfo['clinic_id']))->updateAmount($this->userInfo['clinic_id'], StockType::PULL, $notes)) {
                 return false;

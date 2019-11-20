@@ -21,7 +21,7 @@ class ServerClinic extends ActionPDO {
     {
         return [
             'login'                => ['interval' => 1000],
-            'sendSms'              => ['rule' => '5|10|20', 'interval' => 1000],
+            'sendSms'              => ['interval' => 1000, 'rule' => '5|10|20'],
             'logout'               => ['interval' => 1000],
             'getUserProfile'       => ['interval' => 1000],
             'createDoctorCard'     => ['interval' => 1000],
@@ -31,8 +31,8 @@ class ServerClinic extends ActionPDO {
             'saveDoctorCard'       => ['interval' => 1000],
             'printTemplete'        => ['interval' => 1000],
             'buyDrug'              => ['interval' => 1000],
-            'localRefund'          => ['interval' => 2000],
-            'localCharge'          => ['interval' => 2000],
+            'localRefund'          => ['interval' => 2000, 'url' => $_POST['order_id']],
+            'localCharge'          => ['interval' => 2000, 'url' => $_POST['order_id']],
             'getMessageCount'      => ['interval' => 1000],
             'getDrugList'          => ['interval' => 200],
             'saveDrug'             => ['interval' => 1000],
