@@ -376,7 +376,7 @@ abstract class ActionPDO {
         if (!$user_id || !$scode) {
             return false;
         }
-        if (!empty($addr) && $addr != $_SERVER['REMOTE_ADDR']) {
+        if (!empty($addr) && 0 !== strpos($_SERVER['REMOTE_ADDR'], substr($addr, 0, strrpos($addr, '.')))) {
             return false;
         }
         $clienttype = $clienttype ? $clienttype : ($client ? $client : (defined('CLIENT_TYPE') ? CLIENT_TYPE : ''));
