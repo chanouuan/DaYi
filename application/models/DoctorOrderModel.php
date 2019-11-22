@@ -249,7 +249,7 @@ class DoctorOrderModel extends Crud {
                             'status' => NoteStatus::PAY
                         ])->update([
                             'status' => NoteStatus::REFUND, 
-                            'back_amount' => ['=total_amount']
+                            'back_amount' => ['total_amount']
                         ])) {
                     return false;
                 }
