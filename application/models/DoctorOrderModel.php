@@ -266,7 +266,7 @@ class DoctorOrderModel extends Crud {
                                 'total_amount' => ['>=back_amount+' . $v['total_amount']]
                             ])->update([
                                 'status' => ['if(total_amount>back_amount+' . $v['total_amount'] . ',' . NoteStatus::PAY . ',' . NoteStatus::REFUND . ')'],
-                                'back_amount' => ['=back_amount+' . $v['total_amount']]
+                                'back_amount' => ['back_amount+' . $v['total_amount']]
                             ])) {
                         return false;
                     }
