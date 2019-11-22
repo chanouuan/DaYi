@@ -343,7 +343,7 @@ class DoctorOrderModel extends Crud {
                 'print_code'     => null,
                 'payway'         => $post['second_payway'] ? OrderPayWay::MULTIPAY : $post['payway'],
                 'status'         => OrderStatus::PAY,
-                'stock_id'       => is_int($stockId) ? $stockId : null,
+                'stock_id'       => !is_bool($stockId) ? $stockId : null,
                 'update_time'    => date('Y-m-d H:i:s', TIMESTAMP)
             ])) {
                 return false;
