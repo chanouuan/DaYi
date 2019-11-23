@@ -21,7 +21,6 @@ class UserModel extends Crud {
             'user_id'     => $user_id,
             'scode'       => $scode,
             'clienttype'  => CLIENT_TYPE,
-            'clientinfo'  => null,
             'loginip'     => get_ip(),
             'online'      => 1,
             'update_time' => date('Y-m-d H:i:s', TIMESTAMP)
@@ -114,9 +113,11 @@ class UserModel extends Crud {
         }
         if ($result['errorcount'] <= 10) {
             // 累计次数
-            $this->getDb()->table('__tablepre__smscode')->where('id = ' . $result['id'])->update([
-                'errorcount' => ['errorcount+1']
-            ]);
+            if (!$this->getDb()
+                ->table('__tablepre__smscode')
+                ->where(['id' => $result['id'], 'errorcount' => $result['errorcount']])->update(['errorcount' => ['errorcount+1']])) {
+                return false;
+            }
         }
         return $result['code'] == $code
             && $result['errorcount'] <= 10

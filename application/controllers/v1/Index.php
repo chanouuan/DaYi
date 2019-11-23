@@ -6,7 +6,7 @@ use ActionPDO;
 
 class Index extends ActionPDO {
 
-    public function __init ()
+    public function _init ()
     {
         \DebugLog::_debug(false);
         header('Access-Control-Allow-Origin: *'); // 允许任意域名发起的跨域请求

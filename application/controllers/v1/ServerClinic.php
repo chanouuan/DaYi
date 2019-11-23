@@ -9,6 +9,7 @@ use app\models\DoctorOrderModel;
 use app\models\TreatmentModel;
 use app\models\DrugModel;
 use app\models\StockModel;
+use app\models\ClinicModel;
 use app\models\ServerClinicModel;
 
 /**
@@ -17,11 +18,14 @@ use app\models\ServerClinicModel;
  */
 class ServerClinic extends ActionPDO {
 
-    public function __ratelimit ()
+    public function _ratelimit ()
     {
         return [
             'login'                => ['interval' => 1000],
             'sendSms'              => ['interval' => 1000, 'rule' => '5|10|20'],
+            'regClinic'            => ['interval' => 1000, 'rule' => '20|30|50'],
+            'getClinicDoctors'     => ['interval' => 1000],
+            'microLogin'           => ['interval' => 1000],
             'logout'               => ['interval' => 1000],
             'getUserProfile'       => ['interval' => 1000],
             'createDoctorCard'     => ['interval' => 1000],
@@ -40,8 +44,6 @@ class ServerClinic extends ActionPDO {
             'saveTreatment'        => ['interval' => 1000],
             'getEmployeeList'      => ['interval' => 200],
             'saveEmployee'         => ['interval' => 1000],
-            'getClinicDoctors'     => ['interval' => 1000],
-            'microLogin'           => ['interval' => 1000],
             'addStock'             => ['interval' => 1000],
             'editStock'            => ['interval' => 1000],
             'getStockPullOrPush'   => ['interval' => 200],
@@ -53,13 +55,14 @@ class ServerClinic extends ActionPDO {
         ];
     }
 
-    public function __init()
+    public function _init()
     {
         if ($this->_G['user']) {
             // 获取权限
             $this->_G['token'][4] = isset($this->_G['token'][4]) ? explode('^', $this->_G['token'][4]) : [];
             // 忽略列表
             $ignoreAccess = [
+                'logout',
                 'getUserProfile',
                 'getDoctorList',
                 'printTemplete',
@@ -94,6 +97,28 @@ class ServerClinic extends ActionPDO {
                 }
             }
         }
+    }
+
+    /**
+     * 注册诊所
+     * @param *name 名称
+     * @param address 地址
+     * @param *user_name 登录账号
+     * @param *password 登录密码
+     * @param *invite_code 邀请码
+     * @param *telephone 手机号
+     * @param *msgcode 短信验证码
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *   "clinic_id": 1
+     * }}
+     */
+    public function regClinic ()
+    {
+        return (new ClinicModel())->regClinic($_POST);
     }
 
     /**

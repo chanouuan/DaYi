@@ -100,7 +100,7 @@ class Controller {
 
     public function isCli()
     {
-        return 'cli' == php_sapi_name() ? true : false;
+        return 'cli' === php_sapi_name() ? true : false;
     }
 
     public function run ()
@@ -126,11 +126,11 @@ class Controller {
         $referer->_module = $module;
         $referer->_action = $action;
 
-        if (!method_exists($className, $action)) {
-            $action = '__notfund';
+        if ($action{0} === '_' || !method_exists($className, $action)) {
+            $action = '_notfund';
         }
 
-        $ratelimit = $referer->__ratelimit();
+        $ratelimit = $referer->_ratelimit();
         if (!empty($ratelimit) && isset($ratelimit[$action])) {
             $ratelimit = $ratelimit[$action];
             $result = RateLimit::grant($ratelimit['url'] ? $ratelimit['url'] : ($_SERVER['REMOTE_ADDR'] . $module . $action), $ratelimit['rule'], $ratelimit['interval'], $ratelimit['engine']);
@@ -143,14 +143,14 @@ class Controller {
         $refClass = new ReflectionClass($referer);
         if ($refDoc = $refClass->getMethod($action)->getDocComment()) {
             if (false !== strpos($refDoc, '@login')) {
-                $referer->_G['user'] = $referer->loginCheck();
+                $referer->_G['user'] = $referer->_loginCheck();
                 if (empty($referer->_G['user'])) {
                     json(null, StatusCodes::getMessage(StatusCodes::USER_NOT_LOGIN_ERROR), StatusCodes::USER_NOT_LOGIN_ERROR, StatusCodes::STATUS_OK);
                 }
             }
         }
         unset($refClass, $refDoc);
-        $referer->__init();
+        $referer->_init();
         $result = call_user_func([$referer, $action]);
 
         if (null !== $result) {
@@ -161,7 +161,7 @@ class Controller {
                 if ($referer->isAjax()) {
                     json($result);
                 }
-                $referer->render(concat($module, DIRECTORY_SEPARATOR, $action, '.html'), $result);
+                $referer->_render(concat($module, DIRECTORY_SEPARATOR, $action, '.html'), $result);
             } else {
                 json(null, $result);
             }
@@ -188,38 +188,93 @@ abstract class ActionPDO {
         safepost($_POST);
     }
 
-    /**
-     * 获取Http头
-     */
-    protected function getRequestHeader ()
-    {
-        $this->_G['header'] = [];
-
-        foreach ($_SERVER as $k => $v) {
-            if (0 === strpos($k, 'HTTP_')) {
-                $this->_G['header'][str_replace('_', '-', strtolower(substr($k, 5)))] = $v;
-            }
-        }
-
-        return $this->_G['header'];
-    }
-
-    protected function __style ()
+    protected function _style ()
     {
         return null;
     }
 
-    public function __init ()
+    public function _init ()
     {}
 
-    public function __notfund ()
+    public function _notfund ()
     {
         return error('Undefined Action: ' . $this->_module . $this->_action);
     }
 
-    public function __ratelimit ()
+    public function _ratelimit ()
     {
         return null;
+    }
+
+    public function _render ($tplName, $params = null, $style = null)
+    {
+        $style = !empty($style) ? $style : (defined('APPLICATION_STYLE') ? APPLICATION_STYLE : get_real_val($this->_style(), 'mobile'));
+        $tpl_dir = concat(APPLICATION_URL, '/application/views/', $style);
+        is_array($params) && extract($params);
+        include concat(APPLICATION_PATH, DIRECTORY_SEPARATOR, 'application', DIRECTORY_SEPARATOR, 'views', DIRECTORY_SEPARATOR, $style, DIRECTORY_SEPARATOR, $tplName);
+        exit(0);
+    }
+
+    protected function _showMessage ($type, $message = null, $url = '', $wait = 3, $ajax = null)
+    {
+        $ajax = isset($ajax) ? $ajax : $this->isAjax();
+        if ($ajax) {
+            if ($type === 'success') {
+                json($message, '', 0);
+            } else if ($type === 'error') {
+                json($message, '', -1);
+            }
+            exit(0);
+        }
+        if ($url) {
+            $url = $url{0} === '/' ? (APPLICATION_URL . $url) : $url;
+        } else {
+            if (isset($url)) {
+                $url = !empty($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : APPLICATION_URL;
+            }
+        }
+        if ($wait > 0) {
+            $this->_render('redirect.html', [
+                    'type' => $type,
+                    'message' => $message,
+                    'url' => $url,
+                    'wait' => $wait
+            ]);
+        } else {
+            header('Location: ' . $url);
+        }
+        exit(0);
+    }
+
+    public function _loginCheck ($token = null, $clienttype = null)
+    {
+        if (empty($token)) {
+            if (!empty($_POST['token'])) {
+                $token = $_POST['token'];
+            } elseif (!empty($_GET['token'])){
+                $token = $_GET['token'];
+            } elseif (!empty($_COOKIE['token'])) {
+                $token = $_COOKIE['token'];
+            }
+        }
+        if (empty($token)) {
+            return false;
+        }
+        $this->_G['token'] = explode("\t", authcode(rawurldecode($token), 'DECODE'));
+        list ($user_id, $scode, $client, $addr) = $this->_G['token'];
+        if (!$user_id || !$scode) {
+            return false;
+        }
+        if (!empty($addr) && 0 !== strpos($_SERVER['REMOTE_ADDR'], substr($addr, 0, strrpos($addr, '.')))) {
+            return false;
+        }
+        $clienttype = $clienttype ? $clienttype : ($client ? $client : (defined('CLIENT_TYPE') ? CLIENT_TYPE : ''));
+        return \app\library\DB::getInstance()->field('user_id,clienttype,clientapp,stoken')
+            ->table('__tablepre__session')
+            ->where('user_id = ? and clienttype = ? and scode = ?')
+            ->bindValue($user_id, $clienttype, $scode)
+            ->limit(1)
+            ->find();
     }
 
     public function help ()
@@ -279,16 +334,33 @@ abstract class ActionPDO {
             $docList[$v->name]['return'] = isset($matches[1]) ? $matches[1] : [];
         }
 
-        $this->render('help.html', compact('title', 'docList'), 'default');
+        $this->_render('help.html', compact('title', 'docList'), 'default');
     }
 
-    public function render ($tplName, $params = null, $style = null)
+    protected function success ($message = null, $url = '', $wait = 3, $ajax = null)
     {
-        $style = !empty($style) ? $style : (defined('APPLICATION_STYLE') ? APPLICATION_STYLE : get_real_val($this->__style(), 'mobile'));
-        $tpl_dir = concat(APPLICATION_URL, '/application/views/', $style);
-        is_array($params) && extract($params);
-        include concat(APPLICATION_PATH, DIRECTORY_SEPARATOR, 'application', DIRECTORY_SEPARATOR, 'views', DIRECTORY_SEPARATOR, $style, DIRECTORY_SEPARATOR, $tplName);
-        exit(0);
+        $this->_showMessage('success', $message, $url, $wait, $ajax);
+    }
+
+    protected function error ($message = null, $url = '', $wait = 3, $ajax = null)
+    {
+        $this->_showMessage('error', $message, $url, $wait, $ajax);
+    }
+
+    /**
+     * 获取Http头
+     */
+    protected function getRequestHeader ()
+    {
+        $this->_G['header'] = [];
+
+        foreach ($_SERVER as $k => $v) {
+            if (0 === strpos($k, 'HTTP_')) {
+                $this->_G['header'][str_replace('_', '-', strtolower(substr($k, 5)))] = $v;
+            }
+        }
+
+        return $this->_G['header'];
     }
 
     public function checkImgCode ($code = null)
@@ -306,86 +378,14 @@ abstract class ActionPDO {
         return null;
     }
 
-    public function success ($message = null, $url = '', $wait = 3, $ajax = null)
-    {
-        $this->_showMessage('success', $message, $url, $wait, $ajax);
-    }
-
-    public function error ($message = null, $url = '', $wait = 3, $ajax = null)
-    {
-        $this->_showMessage('error', $message, $url, $wait, $ajax);
-    }
-
     public function isAjax()
     {
         if(isset($_SERVER['HTTP_X_REQUESTED_WITH'])
-            && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+            && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
             return true;
         } else {
             return getgpc('ajax') ? true : false;
         }
-    }
-
-    protected function _showMessage ($type, $message = null, $url = '', $wait = 3, $ajax = null)
-    {
-        $ajax = isset($ajax) ? $ajax : $this->isAjax();
-        if ($ajax) {
-            if ($type == 'success') {
-                json($message, '', 0);
-            } else if ($type == 'error') {
-                json($message, '', -1);
-            }
-            exit(0);
-        }
-        if ($url) {
-            $url = $url{0} == '/' ? (APPLICATION_URL . $url) : $url;
-        } else {
-            if (isset($url)) {
-                $url = !empty($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : APPLICATION_URL;
-            }
-        }
-        if ($wait > 0) {
-            $this->render('redirect.html', [
-                    'type' => $type,
-                    'message' => $message,
-                    'url' => $url,
-                    'wait' => $wait
-            ]);
-        } else {
-            header('Location: ' . $url);
-        }
-        exit(0);
-    }
-
-    public function loginCheck ($token = null, $clienttype = null)
-    {
-        if (empty($token)) {
-            if (!empty($_POST['token'])) {
-                $token = $_POST['token'];
-            } elseif (!empty($_GET['token'])){
-                $token = $_GET['token'];
-            } elseif (!empty($_COOKIE['token'])) {
-                $token = $_COOKIE['token'];
-            }
-        }
-        if (empty($token)) {
-            return false;
-        }
-        $this->_G['token'] = explode("\t", authcode(rawurldecode($token), 'DECODE'));
-        list ($user_id, $scode, $client, $addr) = $this->_G['token'];
-        if (!$user_id || !$scode) {
-            return false;
-        }
-        if (!empty($addr) && 0 !== strpos($_SERVER['REMOTE_ADDR'], substr($addr, 0, strrpos($addr, '.')))) {
-            return false;
-        }
-        $clienttype = $clienttype ? $clienttype : ($client ? $client : (defined('CLIENT_TYPE') ? CLIENT_TYPE : ''));
-        return \app\library\DB::getInstance()->field('user_id,clienttype,clientapp,stoken')
-            ->table('__tablepre__session')
-            ->where('user_id = ? and clienttype = ? and scode = ?')
-            ->bindValue($user_id, $clienttype, $scode)
-            ->limit(1)
-            ->find();
     }
 
 }
@@ -612,7 +612,7 @@ class DebugLog {
         }
 
         if ($rs) {
-            self::$mysql[] = msubstr(is_array($rs) ? json_unicode_encode($rs) : $rs, 0, 200);
+            self::$mysql[] = mb_substr(is_array($rs) ? json_unicode_encode($rs) : $rs, 0, 200, 'UTF-8﻿');
         }
     }
 
@@ -668,7 +668,7 @@ class DebugLog {
             $arr[] = $args;
         }
         if ($rs) {
-            $arr[] = msubstr(is_array($rs) ? json_unicode_encode($rs) : $rs, 0, 200);
+            $arr[] = mb_substr(is_array($rs) ? json_unicode_encode($rs) : $rs, 0, 200, 'UTF-8﻿');
         }
         self::$curl[] = implode(' ', $arr);
     }
@@ -677,7 +677,7 @@ class DebugLog {
      * 输出日志
      */
     public static function _show() {
-        if (isset($_GET['__debug']) && $_GET['__debug'] == DEBUG_PASS) {
+        if (isset($_GET['__debug']) && $_GET['__debug'] === DEBUG_PASS) {
             // 界面上可视化模式输出内容
             self::showViews();
         } else {
@@ -1007,13 +1007,13 @@ class Route {
                 }
                 $find = true;
                 foreach ($v['var'] as $kk => $vv) {
-                    if ($vv[1] == -1) {
+                    if ($vv[1] === -1) {
                         if ($parse_url[$kk] !== $vv[0]) {
                             $find = false;
                             break;
                         }
                     } else {
-                        if ($vv[1] == 1 && !isset($parse_url[$kk])) {
+                        if ($vv[1] === 1 && !isset($parse_url[$kk])) {
                             $find = false;
                             break;
                         }
@@ -1121,19 +1121,19 @@ class RateLimit {
             }
             $currentTime = date('YmdHi', TIMESTAMP);
             $lastTime    = date('YmdHi', $limitVal['time']);
-            if ($currentTime == $lastTime) {
+            if ($currentTime === $lastTime) {
                 if ($limitVal['min_num'] >= $minNum) {
                     return error(null, StatusCodes::getMessage(StatusCodes::ACCESS_NUM_OVERFLOW), StatusCodes::ACCESS_NUM_OVERFLOW);
                 }
                 $param['min_num'] = ['min_num+1'];
             }
-            if (substr($currentTime, 0, 10) == substr($lastTime, 0, 10)) {
+            if (substr($currentTime, 0, 10) === substr($lastTime, 0, 10)) {
                 if ($limitVal['hour_num'] >= $hourNum) {
                     return error(null, StatusCodes::getMessage(StatusCodes::ACCESS_NUM_OVERFLOW), StatusCodes::ACCESS_NUM_OVERFLOW);
                 }
                 $param['hour_num'] = ['hour_num+1'];
             }
-            if (substr($currentTime, 0, 8) == substr($lastTime, 0, 8)) {
+            if (substr($currentTime, 0, 8) === substr($lastTime, 0, 8)) {
                 if ($limitVal['day_num'] >= $dayNum) {
                     return error(null, StatusCodes::getMessage(StatusCodes::ACCESS_NUM_OVERFLOW), StatusCodes::ACCESS_NUM_OVERFLOW);
                 }

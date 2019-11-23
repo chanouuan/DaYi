@@ -178,24 +178,6 @@ function getConfig ($app = null, $name = null, $default = null)
     return isset($config) ? $config : $default;
 }
 
-function msubstr ($str, $start = 0, $length = 250, $charset = 'utf-8', $suffix = false)
-{
-    if (empty($str)) return '';
-    if (function_exists('mb_substr')) {
-        $slice = mb_substr($str, $start, $length, $charset);
-    } elseif (function_exists('iconv_substr')) {
-        $slice = iconv_substr($str, $start, $length, $charset);
-    } else {
-        $re['utf-8'] = "/[\x01-\x7f]|[\xc2-\xdf][\x80-\xbf]|[\xe0-\xef][\x80-\xbf]{2}|[\xf0-\xff][\x80-\xbf]{3}/";
-        $re['gb2312'] = "/[\x01-\x7f]|[\xb0-\xf7][\xa0-\xfe]/";
-        $re['gbk'] = "/[\x01-\x7f]|[\x81-\xfe][\x40-\xfe]/";
-        $re['big5'] = "/[\x01-\x7f]|[\x81-\xfe]([\x40-\x7e]|\xa1-\xfe])/";
-        preg_match_all($re[$charset], $str, $match);
-        $slice = join("", array_slice($match[0], $start, $length));
-    }
-    return $suffix ? $slice . '...' : $slice;
-}
-
 function set_cookie ($name, $value, $expire = 0)
 {
     setcookie($name, $value, $expire, '/');
@@ -1125,7 +1107,7 @@ function array_key_clean (array $input, array $only = [], array $except = [])
 
 function get_short_array ($input, $delimiter = ',', $length = 200)
 {
-    return is_string($input) ? explode($delimiter, trim(msubstr($input, 0, $length), $delimiter)) : [];
+    return is_string($input) ? explode($delimiter, trim(mb_substr($input, 0, $length), $delimiter)) : [];
 }
 
 function get_list_dir ($root, $paths = [])

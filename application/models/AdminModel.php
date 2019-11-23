@@ -393,9 +393,9 @@ class AdminModel extends Crud {
         }
         $userInfo = $userInfo['result'];
 
-        $post['id']     = intval($post['id']);
-        $post['status'] = intval($post['status']);
-        $post['role_id']   = get_short_array($post['role_id']);
+        $post['id']      = intval($post['id']);
+        $post['status']  = intval($post['status']);
+        $post['role_id'] = get_short_array($post['role_id']);
 
         $data = [];
         $data['clinic_id'] = $userInfo['clinic_id'];
@@ -503,6 +503,63 @@ class AdminModel extends Crud {
     }
 
     /**
+     * 新增初始管理员
+     * @return bool
+     */
+    public function initAdmin (array $post)
+    {
+        // 新增管理员角色
+        if (!$adminRoleId = $this->getDb()->table('admin_roles')->insert([
+            'clinic_id' => $post['clinic_id'],
+            'name' => '管理员'
+        ], false, true)) {
+            return false;
+        }
+        if ($this->getDb()->table('admin_permission_role')->insert([
+            'role_id' => $adminRoleId,
+            'permission_id' => 1
+        ])) {
+            return false;
+        }
+
+        // 新增医生角色
+        if (!$doctorRoleId = $this->getDb()->table('admin_roles')->insert([
+            'clinic_id' => $post['clinic_id'],
+            'name' => '医生'
+        ], false, true)) {
+            return false;
+        }
+        if ($this->getDb()->table('admin_permission_role')->insert([
+            'role_id' => array_fill(0, 3, $doctorRoleId),
+            'permission_id' => [2, 10, 11]
+        ])) {
+            return false;
+        }
+
+        // 新增初始用户
+        $data = [];
+        $data['clinic_id']   = $post['clinic_id'];
+        $data['user_name']   = $post['user_name'];
+        $data['password']    = $post['password'];
+        $data['telephone']   = $post['telephone'];
+        $data['password']    = (new UserModel())->hashPassword(md5($post['password'])); // 密码 hash
+        $data['create_time'] = date('Y-m-d H:i:s', TIMESTAMP);
+        if (!$userId = $this->getDb()->insert($data, false, true)) {
+            return false;
+        }
+
+        // 设置用户权限
+        if (!$this->getDb()->table('admin_role_user')->insert([
+            'user_id' => $userId,
+            'role_id' => $adminRoleId
+        ])) {
+            return false;
+        }
+
+        return $userId;
+    }
+
+    /**
      * 记录登录错误次数
      * @param $account
      * @return int
@@ -547,9 +604,7 @@ class AdminModel extends Crud {
     {
         return ($account && $this->getDb()
             ->table('admin_failedlogin')
-            ->field('id')
             ->where(['account' => $account, 'login_count' => ['>', 9], 'update_time' => ['>', TIMESTAMP - 900]])
-            ->limit(1)
             ->count() ? false : true);
     }
 

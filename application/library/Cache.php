@@ -226,7 +226,7 @@ class CacheRedis extends Cache {
     private $options = [
             'database' => 0,
             'server' => [
-                    '127.0.0.1:6379'
+                '127.0.0.1:6379'
             ]
     ];
 
