@@ -330,7 +330,7 @@ class ServerClinicModel extends Crud {
         $userInfo = $userInfo['result'];
 
         // 获取诊所信息
-        $userInfo['clinic_info'] = (new ClinicModel())->find(['id' => $userInfo['clinic_id']], 'id,name,status');
+        $userInfo['clinic_info'] = (new ClinicModel())->find(['id' => $userInfo['clinic_id']], 'id,name,tel,address,is_ds,is_cp,is_rp');
 
         // 消息
         $userInfo['unread_count'] = rand(1, 10); // 未读消息数

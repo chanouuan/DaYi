@@ -89,9 +89,16 @@ class AdminModel extends Crud {
      */
     public function userLogin (array $post)
     {
+        $post['clinic_id'] = intval($post['clinic_id']);
+
+        // 检查诊所状态
+        if (!(new ClinicModel())->count(['id' => $post['clinic_id'], 'status' => 1])) {
+            return error('该诊所已禁用或不存在');
+        }
+
         $condition = [
             'status' => 1,
-            'clinic_id' => intval($post['clinic_id'])
+            'clinic_id' => $post['clinic_id']
         ];
         if (preg_match('/^\d+$/', $post['username'])) {
             if (!validate_telephone($post['username'])) {

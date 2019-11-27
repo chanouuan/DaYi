@@ -5,15 +5,15 @@ function region_number ($num, $min, $min_limit, $max, $max_limit)
     return $num < $min ? $min_limit : ($num > $max ? $max_limit : $num);
 }
 
-function get_diff_time ($start_time, $end_time)
+function get_diff_time ($start_time, $end_time, array $modify = null)
 {
 	if (!$start_time || !$end_time) {
 		return '';
 	}
 	$start_time = new \DateTime(date('Y-m-d H:i:s', $start_time));
-	$end_time = new \DateTime(date('Y-m-d H:i:s', $end_time));
-	$interval = $end_time->diff($start_time);
-	$modify = ['y'=>'年','m'=>'月','d'=>'天','h'=>'小时','i'=>'分','s'=>'秒'];
+	$end_time   = new \DateTime(date('Y-m-d H:i:s', $end_time));
+	$interval   = $end_time->diff($start_time);
+	$modify = $modify ? $modify : ['y'=>'年', 'm'=>'月', 'd'=>'天', 'h'=>'小时', 'i'=>'分', 's'=>'秒'];
 	$str = [];
 	foreach ($modify as $k => $v) {
 		if (isset($interval->{$k}) && $interval->{$k}) {

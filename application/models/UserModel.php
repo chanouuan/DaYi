@@ -29,7 +29,7 @@ class UserModel extends Crud {
         if (!$this->getDb()->table('__tablepre__session')->norepeat($update)) {
             return error(null);
         }
-        $token = rawurlencode(authcode(implode("\t", array_merge([$user_id, $scode, $update['clienttype'], $_SERVER['REMOTE_ADDR']], $extra)), 'ENCODE'));
+        $token = rawurlencode(authcode(implode("\t", array_merge([$user_id, $scode, $update['clienttype'], $_SERVER['REMOTE_ADDR'] !== '::1' ? $_SERVER['REMOTE_ADDR'] : ''], $extra)), 'ENCODE'));
         set_cookie('token', $token, $expire);
         return success([
             'token' => $token

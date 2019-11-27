@@ -363,6 +363,15 @@ class StockModel extends Crud {
             return true;
         }
 
+        // 获取诊所
+        if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
+            return false;
+        }
+        // is_rp:退费即退药
+        if (!$clinicInfo['is_rp']) {
+            return true;
+        }
+
         // 获取已发药
         if (!$batches = $this->getDb()
                 ->table('dayi_stock_detail')
@@ -425,7 +434,7 @@ class StockModel extends Crud {
         if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
             return false;
         }
-        // is_cp:收费即发药 is_rp:退费即退药
+        // is_cp:收费即发药
         if (!$clinicInfo['is_cp']) {
             return true;
         }

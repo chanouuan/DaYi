@@ -51,7 +51,11 @@ class ServerClinic extends ActionPDO {
             'confirmStock'         => ['interval' => 1000],
             'delStock'             => ['interval' => 1000],
             'batchDetail'          => ['interval' => 1000],
-            'stockDetail'          => ['interval' => 1000]
+            'stockDetail'          => ['interval' => 1000],
+            'saveClinicConfig'     => ['interval' => 1000],
+            'checkVipState'        => ['interval' => 1000],
+            'getVipSale'           => ['interval' => 1000],
+            'createPayed'          => ['interval' => 1000]
         ];
     }
 
@@ -67,7 +71,10 @@ class ServerClinic extends ActionPDO {
                 'getDoctorList',
                 'printTemplete',
                 'getDoctorOrderDetail',
-                'getDrugInfo'
+                'getDrugInfo',
+                'checkVipState',
+                'getVipSale',
+                'createPayed'
             ];
             // 重命名
             $map = [
@@ -1095,6 +1102,68 @@ class ServerClinic extends ActionPDO {
     public function stockDetail ()
     {
         return (new StockModel($this->_G['user']['user_id']))->stockDetail(getgpc('stock_id'));
+    }
+
+    /**
+     * 保存诊所配置
+     * @login
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{}
+     * }
+     */
+    public function saveClinicConfig ()
+    {
+        return (new ClinicModel())->saveClinicConfig($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 检查vip
+     * @login
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{}
+     * }
+     */
+    public function checkVipState ()
+    {
+        return (new ClinicModel())->checkVipState($this->_G['user']['user_id']);
+    }
+
+    /**
+     * 获取vip售价
+     * @login
+     * @param level 等级
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{}
+     * }
+     */
+    public function getVipSale ()
+    {
+        return (new ClinicModel())->getVipSale($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 生成收款码
+     * @login
+     * @param sale_id sale_id
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{}
+     * }
+     */
+    public function createPayed ()
+    {
+        return (new ClinicModel())->createPayed($this->_G['user']['user_id'], $_POST);
     }
 
 }

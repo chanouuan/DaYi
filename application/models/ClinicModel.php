@@ -3,10 +3,281 @@
 namespace app\models;
 
 use Crud;
+use app\common\VipLevel;
 
 class ClinicModel extends Crud {
 
     protected $table = 'dayi_clinic';
+
+    /**
+     * 生成收款码
+     * @return array
+     */
+    public function createPayed ($user_id, array $post)
+    {
+        $post['payway']  = trim_space($post['payway']);
+        $post['sale_id'] = intval($post['sale_id']);
+
+        if (!$post['sale_id']) {
+            return error('请选择购买时长');
+        }
+
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+        if ($userInfo['errorcode'] !== 0) {
+            return $userInfo;
+        }
+        $userInfo = $userInfo['result'];
+
+        if (!$clinicInfo = $this->find(['id' => $userInfo['clinic_id']], 'vip_level,expire_date,daily_cost')) {
+            return error('当前诊所未找到');
+        }
+
+        // 获取剩余天数
+        $clinicInfo['use_days'] = VipLevel::getUseDays($clinicInfo['expire_date']);
+
+        // 获取购买时长和售价
+        if (!$saleInfo = $this->getDb()
+            ->field('month,vip_level,price')
+            ->table('dayi_vip_sale')
+            ->where(['id' => $post['sale_id']])
+            ->find()) {
+            return error('未找到售价配置');
+        }
+
+        // 判断升配或降配 0不变 1升配 2降配
+        if ($clinicInfo['vip_level']) {
+            if ($clinicInfo['vip_level'] == $saleInfo['vip_level']) {
+                $changeLevel = 0;
+            } else {
+                $changeLevel = $saleInfo['vip_level'] > $clinicInfo['vip_level'] ? 1 : 2;
+            }
+        } else {
+            $changeLevel = 0;
+        }
+
+        // 授权有效期内不允许降配
+        if ($changeLevel === 2 && $clinicInfo['use_days'] > 0) {
+            return error('产品在有效授权期内，不允许降配！');
+        }
+
+        // 升配补差价
+        $diff = 0;
+        if ($changeLevel === 1 && $clinicInfo['use_days'] > 0) {
+            $diff = $clinicInfo['use_days'] * $clinicInfo['daily_cost'];
+        }
+        $price = $saleInfo['price'] > $diff ? $saleInfo['price'] - $diff : 0; // 应付金额
+
+        $mark = [
+            'clinic_id'   => $userInfo['clinic_id'],
+            'vip_level'   => $saleInfo['vip_level'],
+            'expire_date' => '',
+            'daily_cost'  => 0
+        ];
+
+        // 计算有效期截止日期
+        if ($changeLevel === 0) {
+            $beginTime = $clinicInfo['vip_level'] ? strtotime($clinicInfo['expire_date']) : strtotime(date('Y-m-d', TIMESTAMP));
+        } else {
+            $beginTime = strtotime(date('Y-m-d', TIMESTAMP));
+        }
+        $mark['expire_date'] = date('Y-m-d', mktime(0, 0, 0, date('m', $beginTime) + $saleInfo['month'], date('d', $beginTime), date('Y', $beginTime)));
+        
+        // 计算每日费用
+        $mark['daily_cost'] = bcdiv($saleInfo['price'], ceil(bcdiv(strtotime($mark['expire_date']) - $beginTime, 86400, 6)));
+
+        // 生成交易单
+        if (!$tradeId = $this->getDb()->table('__tablepre__trades')->insert([
+            'source'      => 'vip',
+            'uses'        => '签约缴费',
+            'user_id'     => $user_id,
+            'pay'         => $price,
+            'money'       => $price,
+            'payway'      => $post['payway'],
+            'mark'        => json_encode($mark),
+            'order_code'  => $this->generateOrderCode($user_id),
+            'create_time' => date('Y-m-d H:i:s', TIMESTAMP)
+        ], false ,true)) {
+            return error('交易单保存失败');
+        }
+
+        if ($price === 0) {
+            // 免支付
+            $res = $this->handleTradeSuc($tradeId);
+            if ($res['errorcode'] !== 0) {
+                return $res;
+            }
+        }
+
+        return success([
+            'trade_id'    => $tradeId,
+            'pay'         => round_dollar($price),
+            'pay_status'  => $price === 0 ? 1 : 0,
+            'vip_msg'     => VipLevel::getMessage($mark['vip_level']),
+            'expire_date' => $mark['expire_date']
+        ]);
+    }
+
+    /**
+     * 交易成功的后续处理
+     * @return array
+     */
+    public function handleTradeSuc ($tradeId, array $tradeParam = [])
+    {
+        if (!$tradeInfo = $this->getDb()
+            ->table('__tablepre__trades')
+            ->where(['id' => $tradeId])
+            ->limit(1)
+            ->find()) {
+            return error('交易单不存在');
+        }
+
+        $tradeParam = array_merge($tradeParam, [
+            'status' => 1, 'pay_time' => date('Y-m-d H:i:s', TIMESTAMP)
+        ]);
+
+        // 更新交易状态
+        if (!$this->getDb()->transaction(function ($db) use($tradeInfo, $tradeParam) {
+            if (!$db->table('__tablepre__trades')->where([
+                'id' => $tradeInfo['id'],
+                'status' => 0
+            ])->update($tradeParam)) {
+                return false;
+            }
+            $mark = json_decode($tradeInfo['mark'], true);
+            if (!$db->table($this->table)->where(['id' => $mark['clinic_id']])->update([
+                'vip_level'   => $mark['vip_level'],
+                'expire_date' => $mark['expire_date'],
+                'daily_cost'  => $mark['daily_cost'],
+                'update_time' => date('Y-m-d H:i:s', TIMESTAMP)
+            ])) {
+                return false;
+            }
+            return true;
+        })) {
+            return error('更新交易失败');
+        }
+
+        return success('ok');
+    }
+
+    /**
+     * 获取 vip 售价
+     * @return array
+     */
+    public function getVipSale ($user_id, array $post)
+    {
+        $post['level'] = VipLevel::format($post['level']);
+
+        if (!$post['level']) {
+            return error('请选择套餐');
+        }
+
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+        if ($userInfo['errorcode'] !== 0) {
+            return $userInfo;
+        }
+        $userInfo = $userInfo['result'];
+
+        if (!$clinicInfo = $this->find(['id' => $userInfo['clinic_id']], 'id,vip_level,expire_date,daily_cost')) {
+            return error('当前诊所未找到');
+        }
+
+        // 获取剩余天数
+        $clinicInfo['next_msg']   = VipLevel::getMessage($post['level']);
+        $clinicInfo['vip_msg']    = VipLevel::getMessage($clinicInfo['vip_level']);
+        $clinicInfo['use_date']   = VipLevel::getUseDate($clinicInfo['expire_date']);
+        $clinicInfo['use_days']   = VipLevel::getUseDays($clinicInfo['expire_date']);
+        $clinicInfo['daily_cost'] = round_dollar($clinicInfo['daily_cost']);
+
+        // 判断升配或降配 0不变 1升配 2降配
+        if ($clinicInfo['vip_level']) {
+            if ($clinicInfo['vip_level'] == $post['level']) {
+                $clinicInfo['change_level'] = 0;
+            } else {
+                $clinicInfo['change_level'] = $post['level'] > $clinicInfo['vip_level'] ? 1 : 2;
+            }
+        } else {
+            $clinicInfo['change_level'] = 0;
+        }
+
+        // 获取购买时长和售价
+        if (!$clinicInfo['sales'] = $this->getDb()
+            ->field('id,month,price,old_price')
+            ->table('dayi_vip_sale')
+            ->where(['vip_level' => $post['level']])
+            ->order('month')
+            ->select()) {
+            return error('该套餐未设置售价');
+        }
+
+        $show = [
+            6  => '半年',
+            12 => '1 年',
+            24 => '2 年',
+            36 => '3 年',
+        ];
+        foreach ($clinicInfo['sales'] as $k => $v) {
+            $clinicInfo['sales'][$k]['price']      = round_dollar($v['price']);
+            $clinicInfo['sales'][$k]['old_price']  = round_dollar($v['old_price']);
+            $clinicInfo['sales'][$k]['show']       = isset($show[$v['month']]) ? $show[$v['month']] : ($v['month'] . ' 个月');
+        }
+
+        return success($clinicInfo);
+    }
+
+    /**
+     * 检查 vip
+     * @return array
+     */
+    public function checkVipState ($user_id)
+    {
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+        if ($userInfo['errorcode'] !== 0) {
+            return $userInfo;
+        }
+        $userInfo = $userInfo['result'];
+
+        if (!$clinicInfo = $this->find(['id' => $userInfo['clinic_id']], 'id,vip_level,expire_date')) {
+            return error('当前诊所未找到');
+        }
+
+        $clinicInfo['vip_msg']  = VipLevel::getMessage($clinicInfo['vip_level']);
+        $clinicInfo['use_date'] = VipLevel::getUseDate($clinicInfo['expire_date']);
+
+        return success($clinicInfo);
+    }
+
+    /**
+     * 保存诊所配置
+     * @return array
+     */
+    public function saveClinicConfig ($user_id, array $post)
+    {
+        $data = [];
+        $data['name']    = mb_substr(trim_space($post['name']), 0, 20);
+        $data['tel']     = trim_space($post['tel']);
+        $data['address'] = mb_substr(trim_space($post['address']), 0, 80);
+        $data['is_ds']   = $post['is_ds'] ? 1 : 0;
+        $data['is_cp']   = $post['is_cp'] ? 1 : 0;
+        $data['is_rp']   = $post['is_rp'] ? 1 : 0;
+
+        if ($data['tel'] && !validate_telephone($data['tel'])) {
+            return error('手机号格式不正确');
+        }
+
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+        if ($userInfo['errorcode'] !== 0) {
+            return $userInfo;
+        }
+        $userInfo = $userInfo['result'];
+
+        $data['update_time'] = date('Y-m-d H:i:s', TIMESTAMP);
+        if (false === $this->getDb()->where(['id' => $userInfo['clinic_id']])->update($data)) {
+            return error('保存配置失败');
+        }
+
+        return success('ok');
+    }
 
     /**
      * 注册诊所
@@ -73,7 +344,8 @@ class ClinicModel extends Crud {
                     'address'     => $post['address'],
                     'tel'         => $post['telephone'],
                     'db_instance' => $cluster['instance'],
-                    'db_chunk'    => $cluster['chunk']
+                    'db_chunk'    => $cluster['chunk'],
+                    'expire_date' => date('Y-m-d', TIMESTAMP + (86400 * 30)) // 试用期 30 天
                 ], false, true)) {
                 return false;
             }
@@ -126,6 +398,18 @@ class ClinicModel extends Crud {
             'instance' => $cluster['instance'],
             'chunk' => $cluster['chunk'][$index]
         ];
+    }
+
+    /**
+     * 生成单号(16位)
+     * @return string
+     */
+    private function generateOrderCode ($uid)
+    {
+        $code[] = date('Ymd', TIMESTAMP);
+        $code[] = (rand() % 10) . (rand() % 10) . (rand() % 10) . (rand() % 10);
+        $code[] = str_pad(substr($uid, -4),4,'0',STR_PAD_LEFT);
+        return implode('', $code);
     }
 
 }
