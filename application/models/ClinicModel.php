@@ -136,7 +136,7 @@ class ClinicModel extends Crud {
         ]);
 
         // 更新交易状态
-        if (!$this->getDb()->transaction(function ($db) use($tradeInfo, $tradeParam) {
+        if (!$this->getDb()->transaction(function ($db) use ($tradeInfo, $tradeParam) {
             if (!$db->table('__tablepre__trades')->where([
                 'id' => $tradeInfo['id'],
                 'status' => 0
@@ -202,7 +202,7 @@ class ClinicModel extends Crud {
 
         // 获取购买时长和售价
         if (!$clinicInfo['sales'] = $this->getDb()
-            ->field('id,month,price,old_price')
+            ->field('id,month,price,old_price,remark')
             ->table('dayi_vip_sale')
             ->where(['vip_level' => $post['level']])
             ->order('month')
@@ -217,9 +217,9 @@ class ClinicModel extends Crud {
             36 => '3 年',
         ];
         foreach ($clinicInfo['sales'] as $k => $v) {
-            $clinicInfo['sales'][$k]['price']      = round_dollar($v['price']);
-            $clinicInfo['sales'][$k]['old_price']  = round_dollar($v['old_price']);
-            $clinicInfo['sales'][$k]['show']       = isset($show[$v['month']]) ? $show[$v['month']] : ($v['month'] . ' 个月');
+            $clinicInfo['sales'][$k]['price']     = round_dollar($v['price']);
+            $clinicInfo['sales'][$k]['old_price'] = round_dollar($v['old_price']);
+            $clinicInfo['sales'][$k]['show']      = isset($show[$v['month']]) ? $show[$v['month']] : ($v['month'] . ' 个月');
         }
 
         return success($clinicInfo);
