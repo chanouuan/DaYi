@@ -12,6 +12,7 @@ use app\common\OrderPayWay;
 use app\common\NoteAllergy;
 use app\common\StockType;
 use app\common\StockWay;
+use app\common\GenerateCache;
 use Crud;
 
 class ServerClinicModel extends Crud {
@@ -330,7 +331,7 @@ class ServerClinicModel extends Crud {
         $userInfo = $userInfo['result'];
 
         // 获取诊所信息
-        $userInfo['clinic_info'] = (new ClinicModel())->find(['id' => $userInfo['clinic_id']], 'id,name,tel,address,is_ds,is_cp,is_rp');
+        $userInfo['clinic_info'] = GenerateCache::getClinic($userInfo['clinic_id'], 'id,name,tel,address,is_ds,is_cp,is_rp,vip_level');
 
         // 消息
         $userInfo['unread_count'] = rand(1, 10); // 未读消息数

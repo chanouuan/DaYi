@@ -14,7 +14,7 @@ class VipLevel
     const HIGH   = 3;
 
     static $message = [
-        0 => '试用中',
+        0 => '试用版',
         1 => '基础版',
         2 => '高级版',
         3 => '豪华版'

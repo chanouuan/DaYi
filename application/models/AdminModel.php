@@ -4,6 +4,7 @@ namespace app\models;
 
 use app\common\CommonStatus;
 use app\common\Gender;
+use app\common\GenerateCache;
 use Crud;
 
 class AdminModel extends Crud {
@@ -39,7 +40,7 @@ class AdminModel extends Crud {
         $userInfo = $userInfo['result'];
 
         // 获取管理权限
-        $permission = $this->getUserPermissions($userInfo['user_id']);
+        $permission = $this->getUserPermissions($userInfo['user_id'], $userInfo['vip_level']);
 
         // login 权限验证
         if ($post['role'] && empty(array_intersect($post['role'], $permission['role']))) {
@@ -48,8 +49,6 @@ class AdminModel extends Crud {
         if (empty(array_intersect($post['permission'] ? $post['permission'] : ['ANY', 'login'], $permission['permission']))) {
             return error('操作权限不足');
         }
-        $userInfo['role'] = $permission['role'];
-        $userInfo['permission'] = $permission['permission'];
 
         $opt = [];
         if (isset($post['clienttype'])) {
@@ -61,12 +60,14 @@ class AdminModel extends Crud {
 
         // 登录状态
         $result = (new UserModel())->setloginstatus($userInfo['user_id'], uniqid(), $opt, [
-            implode('^', $userInfo['permission'])
+            implode('^', $permission['id'])
         ]);
         if ($result['errorcode'] !== 0) {
             return $result;
         }
-        $userInfo['token'] = $result['result']['token'];
+
+        $userInfo['token']      = $result['result']['token'];
+        $userInfo['permission'] = $permission['permission'];
 
         return success($userInfo);
     }
@@ -90,11 +91,6 @@ class AdminModel extends Crud {
     public function userLogin (array $post)
     {
         $post['clinic_id'] = intval($post['clinic_id']);
-
-        // 检查诊所状态
-        if (!(new ClinicModel())->count(['id' => $post['clinic_id'], 'status' => 1])) {
-            return error('该诊所已禁用或不存在');
-        }
 
         $condition = [
             'status' => 1,
@@ -124,11 +120,21 @@ class AdminModel extends Crud {
             }
         }
 
+        // 检查诊所状态
+        $clinicInfo = GenerateCache::getClinic($post['clinic_id'], 'vip_level,expire_date,status');
+        if ($clinicInfo['status'] != 1) {
+            return error('本诊所已禁用或不存在');
+        }
+        if ($clinicInfo['vip_expire']) {
+            return error('服务期限已到期');
+        }
+
         return success([
             'user_id'   => $userInfo['id'],
             'avatar'    => httpurl($userInfo['avatar']),
             'nickname'  => get_real_val($userInfo['full_name'], $userInfo['user_name'], $userInfo['telephone']),
-            'telephone' => $userInfo['telephone']
+            'telephone' => $userInfo['telephone'],
+            'vip_level' => $clinicInfo['vip_level']
         ]);
     }
 
@@ -311,10 +317,9 @@ class AdminModel extends Crud {
 
     /**
      * 获取用户所有权限
-     * @param $user_id 用户ID
      * @return array
      */
-    public function getUserPermissions ($user_id)
+    public function getUserPermissions ($user_id, $vip_level)
     {
         // 获取用户角色
         $roles = $this->getDb()->table('admin_role_user')->field('role_id')->where(['user_id' => $user_id])->select();
@@ -324,16 +329,26 @@ class AdminModel extends Crud {
         $roles = array_column($roles, 'role_id');
 
         // 获取权限
-        if (empty($permissions = $this->getDb()
+        if (!$permissions = $this->getDb()
             ->table('admin_permission_role permission_role inner join admin_permissions permissions on permissions.id = permission_role.permission_id')
-            ->field('permissions.name')
-            ->where(['permission_role.role_id' => ['IN', $roles]])
-            ->select())) {
+            ->field('permissions.id,permissions.name,permissions.if_vip')
+            ->where(['permission_role.role_id' => ['in', $roles]])
+            ->select()) {
             return [];
+        }
+
+        // 验证 vip 授权
+        foreach ($permissions as $k => $v) {
+            if ($v['if_vip']) {
+                if (!in_array($vip_level, json_decode($v['if_vip'], true))) {
+                    unset($permissions[$k]);
+                }
+            }
         }
 
         return [
             'role' => $roles,
+            'id' => array_column($permissions, 'id'),
             'permission' => array_column($permissions, 'name')
         ];
     }

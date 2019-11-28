@@ -11,6 +11,7 @@ use app\models\DrugModel;
 use app\models\StockModel;
 use app\models\ClinicModel;
 use app\models\ServerClinicModel;
+use app\common\GenerateCache;
 
 /**
  * 诊所服务端接口
@@ -63,7 +64,8 @@ class ServerClinic extends ActionPDO {
     {
         if ($this->_G['user']) {
             // 获取权限
-            $this->_G['token'][4] = isset($this->_G['token'][4]) ? explode('^', $this->_G['token'][4]) : [];
+            $permissions = isset($this->_G['token'][4]) ? explode('^', $this->_G['token'][4]) : [];
+            $permissions = GenerateCache::mapPermissions($permissions);
             // 忽略列表
             $ignoreAccess = [
                 'logout',
@@ -71,10 +73,7 @@ class ServerClinic extends ActionPDO {
                 'getDoctorList',
                 'printTemplete',
                 'getDoctorOrderDetail',
-                'getDrugInfo',
-                'checkVipState',
-                'getVipSale',
-                'createPayed'
+                'getDrugInfo'
             ];
             // 重命名
             $map = [
@@ -99,7 +98,7 @@ class ServerClinic extends ActionPDO {
             $action = isset($map[$this->_action]) ? $map[$this->_action] : $this->_action;
             // 权限验证
             if (!in_array($action, $ignoreAccess)) {
-                if (empty(array_intersect(['ANY', $action], $this->_G['token'][4]))) {
+                if (empty(array_intersect(['ANY', $action], $permissions))) {
                     json(null,'权限不足', 100);
                 }
             }
@@ -189,7 +188,6 @@ class ServerClinic extends ActionPDO {
      *     "telephone":"", //手机号
      *     "nickname":"", //昵称
      *     "token":"", //登录凭证
-     *     "role":"", //角色
      *     "permission":"" //权限
      * }}
      */
@@ -251,10 +249,13 @@ class ServerClinic extends ActionPDO {
     public function getUserProfile ()
     {
         $result = (new ServerClinicModel())->getUserProfile($this->_G['user']['user_id']);
-        if ($result['errorcode'] !== 0) {
-            return $result;
+        if ($result['errorcode'] === 0) {
+            $permissions = isset($this->_G['token'][4]) ? explode('^', $this->_G['token'][4]) : [];
+            $permissions = GenerateCache::mapPermissions($permissions);
+            $result['result']['permission'] = $permissions;
+            $ssig = strlen(implode('', $permissions));
+            $result['result']['ssig'] = $ssig * 2 + $ssig % 10;
         }
-        $result['result']['permission'] = $this->_G['token'][4];
         return $result;
     }
 
@@ -1121,7 +1122,6 @@ class ServerClinic extends ActionPDO {
 
     /**
      * 检查vip
-     * @login
      * @return array
      * {
      * "errorcode":0,
@@ -1131,12 +1131,11 @@ class ServerClinic extends ActionPDO {
      */
     public function checkVipState ()
     {
-        return (new ClinicModel())->checkVipState($this->_G['user']['user_id']);
+        return (new ClinicModel())->checkVipState(getgpc('clinic_id'));
     }
 
     /**
      * 获取vip售价
-     * @login
      * @param level 等级
      * @return array
      * {
@@ -1147,12 +1146,11 @@ class ServerClinic extends ActionPDO {
      */
     public function getVipSale ()
     {
-        return (new ClinicModel())->getVipSale($this->_G['user']['user_id'], $_POST);
+        return (new ClinicModel())->getVipSale($_POST);
     }
 
     /**
      * 生成收款码
-     * @login
      * @param sale_id sale_id
      * @return array
      * {
@@ -1163,7 +1161,7 @@ class ServerClinic extends ActionPDO {
      */
     public function createPayed ()
     {
-        return (new ClinicModel())->createPayed($this->_G['user']['user_id'], $_POST);
+        return (new ClinicModel())->createPayed($_POST);
     }
 
 }
