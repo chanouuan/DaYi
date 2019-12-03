@@ -21,6 +21,75 @@ class VipLevel
     ];
 
     /**
+     * 录音文件升配后是否可以下载
+     * @param $clinic_id
+     * @param $create_time 录音创建时间
+     * @return bool
+     */
+    public static function isDownloadVoiceByUp ($clinic_id, $create_time)
+    {
+        if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
+            return false;
+        }
+
+        if ($clinicInfo['vip_expire']) {
+            return true;
+        }
+
+        if ($clinicInfo['vip_level'] === self::HIGH) {
+            return false;
+        }
+
+        $days = floor(bcdiv(TIMESTAMP - strtotime($create_time), 86400, 6));
+
+        return $days < self::getVoiceSaveTime(self::HIGH);
+    }
+
+    /**
+     * 录音文件剩余保存时间
+     * @param $clinic_id
+     * @param $create_time 录音创建时间
+     * @return string
+     */
+    public static function checkVoiceSaveTime ($clinic_id, $create_time)
+    {
+        if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
+            return 0;
+        }
+
+        if ($clinicInfo['vip_expire']) {
+            return 0;
+        }
+
+        // 已保存天数
+        $days = floor(bcdiv(TIMESTAMP - strtotime($create_time), 86400, 6));
+
+        $allowSave = self::getVoiceSaveTime($clinicInfo['vip_level']);
+
+        if ($days >= $allowSave) {
+            return 0;
+        }
+
+        return $allowSave - $days;
+    }
+
+    /**
+     * 获取录音文件保存时间
+     * @param $vip_level vip等级
+     * @return int
+     */
+    public static function getVoiceSaveTime ($vip_level)
+    {
+        $allowSave = [
+            self::BETA   => 3,
+            self::SIMPLE => 7,
+            self::BASE   => 30,
+            self::HIGH   => 180,
+        ];
+        return isset($allowSave[$vip_level]) ? $allowSave[$vip_level] : 0;
+    }
+
+    /**
      * 获取剩余时间
      * @return string
      */

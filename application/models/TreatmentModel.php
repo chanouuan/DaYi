@@ -33,10 +33,6 @@ class TreatmentModel extends Crud {
     public function saveTreatment ($user_id, $post)
     {
         $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
 
         $post['id']     = intval($post['id']);
         $post['status'] = intval($post['status']);
@@ -144,10 +140,6 @@ class TreatmentModel extends Crud {
 
         // 用户获取
         $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
 
         $condition = [
             'clinic_id' => $userInfo['clinic_id']

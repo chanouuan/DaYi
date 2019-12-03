@@ -121,7 +121,7 @@ class AdminModel extends Crud {
         }
 
         // 检查诊所状态
-        $clinicInfo = GenerateCache::getClinic($post['clinic_id'], 'vip_level,expire_date,status');
+        $clinicInfo = GenerateCache::getClinic($post['clinic_id']);
         if ($clinicInfo['status'] != 1) {
             return error('本诊所已禁用或不存在');
         }
@@ -164,15 +164,15 @@ class AdminModel extends Crud {
     public function checkAdminInfo ($user_id)
     {
         if (!$userInfo = $this->getAdminInfo($user_id)) {
-            return error('用户不存在');
+            json(null, '用户不存在', -1);
         }
         if ($userInfo['status'] != CommonStatus::OK) {
-            return error('你已被禁用');
+            json(null, '你已被禁用', -1);
         }
         if (!$userInfo['clinic_id']) {
-            return error('你未绑定诊所');
+            json(null, '你未绑定诊所', -1);
         }
-        return success($userInfo);
+        return $userInfo;
     }
 
     /**
@@ -220,10 +220,6 @@ class AdminModel extends Crud {
 
         // 用户获取
         $userInfo = $this->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
 
         $condition = [
             'clinic_id' => $userInfo['clinic_id']
@@ -410,10 +406,6 @@ class AdminModel extends Crud {
     public function saveEmployee ($user_id, array $post)
     {
         $userInfo = $this->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
 
         $post['id']      = intval($post['id']);
         $post['status']  = intval($post['status']);

@@ -511,14 +511,14 @@ class Crud {
         return $this->getDb()->field($field)->where($condition)->order($order)->limit(1)->find();
     }
 
-    protected function select (array $condition, $field = null, $order = null, $limit = null)
+    protected function select (array $condition, $field = null, $order = null, $limit = null, $group = null)
     {
-        return $this->getDb()->field($field)->where($condition)->order($order)->limit($limit)->select();
+        return $this->getDb()->field($field)->where($condition)->order($order)->group($group)->limit($limit)->select();
     }
 
-    protected function count (array $condition)
+    protected function count (array $condition, $field = null, $group = null)
     {
-        return $this->getDb()->where($condition)->count();
+        return $this->getDb()->field($field)->where($condition)->group($group)->count();
     }
 
 }

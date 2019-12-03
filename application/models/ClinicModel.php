@@ -4,6 +4,7 @@ namespace app\models;
 
 use Crud;
 use app\common\VipLevel;
+use app\common\GenerateCache;
 
 class ClinicModel extends Crud {
 
@@ -26,7 +27,7 @@ class ClinicModel extends Crud {
             return error('请选择支付方式');
         } 
 
-        if (!$clinicInfo = $this->find(['id' => $post['clinic_id']], 'id,vip_level,expire_date,daily_cost')) {
+        if (!$clinicInfo = GenerateCache::getClinic($post['clinic_id'])) {
             return error('当前诊所未找到');
         }
 
@@ -149,6 +150,7 @@ class ClinicModel extends Crud {
             ])) {
                 return false;
             }
+            GenerateCache::removeClinic($mark['clinic_id']);
             return true;
         })) {
             return error('更新交易失败');
@@ -170,7 +172,7 @@ class ClinicModel extends Crud {
             return error('请选择套餐');
         }
 
-        if (!$clinicInfo = $this->find(['id' => $post['clinic_id']], 'id,vip_level,expire_date,daily_cost')) {
+        if (!$clinicInfo = GenerateCache::getClinic($post['clinic_id'])) {
             return error('当前诊所未找到');
         }
 
@@ -225,7 +227,7 @@ class ClinicModel extends Crud {
     {
         $clinic_id = intval($clinic_id);
 
-        if (!$clinicInfo = $this->find(['id' => $clinic_id], 'id,vip_level,expire_date')) {
+        if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
             return error('当前诊所未找到');
         }
 
@@ -252,12 +254,8 @@ class ClinicModel extends Crud {
         }
 
         $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-        if ($userInfo['errorcode'] !== 0) {
-            return $userInfo;
-        }
-        $userInfo = $userInfo['result'];
 
-        if (!$clinicInfo = $this->find(['id' => $userInfo['clinic_id']], 'vip_level')) {
+        if (!$clinicInfo = GenerateCache::getClinic($userInfo['clinic_id'])) {
             return error('当前诊所未找到');
         }
 
@@ -268,9 +266,12 @@ class ClinicModel extends Crud {
             $data['is_rp'] = $post['is_rp'] ? 1 : 0;
         }
 
-        $data['update_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-        if (false === $this->getDb()->where(['id' => $userInfo['clinic_id']])->update($data)) {
+        if (false === ($result = $this->getDb()->where(['id' => $userInfo['clinic_id']])->update($data))) {
             return error('保存配置失败');
+        }
+
+        if ($result) {
+            GenerateCache::removeClinic($userInfo['clinic_id']);
         }
 
         return success('ok');

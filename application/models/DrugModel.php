@@ -20,11 +20,7 @@ class DrugModel extends Crud {
     {
         // 分区
         if ($user_id) {
-            $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-            if ($userInfo['errorcode'] !== 0) {
-                json(null, $userInfo['message'], $userInfo['errorcode']);
-            }
-            $this->userInfo = $userInfo['result'];
+            $this->userInfo = (new AdminModel())->checkAdminInfo($user_id);
             $clinic_id = $this->userInfo['clinic_id'];
         }
         if (empty($clinic_id)) {

@@ -17,6 +17,7 @@ use app\common\OrderStatus;
 use app\common\GenerateCache;
 use app\common\StockType;
 use app\common\NoteStatus;
+use app\common\VipLevel;
 use Crud;
 
 class DoctorOrderModel extends Crud {
@@ -28,11 +29,7 @@ class DoctorOrderModel extends Crud {
     {
         // 分区
         if ($user_id) {
-            $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-            if ($userInfo['errorcode'] !== 0) {
-                json(null, $userInfo['message'], $userInfo['errorcode']);
-            }
-            $this->userInfo = $userInfo['result'];
+            $this->userInfo = (new AdminModel())->checkAdminInfo($user_id);
             $clinic_id = $this->userInfo['clinic_id'];
         }
         if (empty($clinic_id)) {
@@ -402,6 +399,15 @@ class DoctorOrderModel extends Crud {
         $orderInfo['pay']      = round_dollar($orderInfo['pay']);
         $orderInfo['discount'] = round_dollar($orderInfo['discount']);
 
+        // 录音保存时间
+        if ($orderInfo['voice']) {
+            $orderInfo['voice_save'] = VipLevel::checkVoiceSaveTime($this->userInfo['clinic_id'], $orderInfo['create_time']);
+            $orderInfo['is_up'] = VipLevel::isDownloadVoiceByUp($this->userInfo['clinic_id'], $orderInfo['create_time']);
+            if ($orderInfo['voice_save'] <= 0) {
+                $orderInfo['voice'] = 'empty';
+            }
+        }
+
         // 支付方式
         if ($orderInfo['payway'] == OrderPayWay::MULTIPAY) {
             // 多种支付
@@ -553,6 +559,7 @@ class DoctorOrderModel extends Crud {
 
         // 条件查询
         $condition = [
+            'clinic_id'   => $this->userInfo['clinic_id'],
             'doctor_id'   => $this->userInfo['id'],
             'enum_source' => OrderSource::DOCTOR,
             'create_time' => ['between', [$post['start_time'], $post['end_time']]]

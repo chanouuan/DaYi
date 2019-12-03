@@ -56,7 +56,8 @@ class ServerClinic extends ActionPDO {
             'saveClinicConfig'     => ['interval' => 1000],
             'checkVipState'        => ['interval' => 1000],
             'getVipSale'           => ['interval' => 1000],
-            'createPayed'          => ['interval' => 1000]
+            'createPayed'          => ['interval' => 1000],
+            'indexCount'           => ['interval' => 1000]
         ];
     }
 
@@ -253,8 +254,8 @@ class ServerClinic extends ActionPDO {
             $permissions = isset($this->_G['token'][4]) ? explode('^', $this->_G['token'][4]) : [];
             $permissions = GenerateCache::mapPermissions($permissions);
             $result['result']['permission'] = $permissions;
-            $ssig = strlen(implode('', $permissions));
-            $result['result']['ssig'] = $ssig * 2 + $ssig % 10;
+            $s = strlen(implode('', $permissions));
+            $result['result']['s'] = $s * 2 + $s % 10 + 127;
         }
         return $result;
     }
@@ -1162,6 +1163,20 @@ class ServerClinic extends ActionPDO {
     public function createPayed ()
     {
         return (new ClinicModel())->createPayed($_POST);
+    }
+
+    /**
+     * 首页统计
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{}
+     * }
+     */
+    public function indexCount ()
+    {
+        return (new ServerClinicModel())->indexCount(getgpc('clinic_id'));
     }
 
 }

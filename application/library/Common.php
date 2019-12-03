@@ -364,7 +364,7 @@ function get_ip ()
 
 function authcode ($string, $operation = 'DECODE', $key = null)
 {
-    $key = $key ? $key : '######';
+    $key = $key ? $key : '#_$%*@';
     if ($operation == 'DECODE') {
         $string = base64_decode($string);
         $slen = strlen($string);
@@ -373,8 +373,11 @@ function authcode ($string, $operation = 'DECODE', $key = null)
         for ($i = 0; $i < $slen; $i = $i + $klen) {
             $plain .= $key ^ substr($string, $i, $klen);
         }
-        return $plain;
+        $plain = explode('!', $plain);
+        return strlen($plain[0]) == $plain[1] ? $plain[0] : null;
     }
+    $slen = strlen($string);
+    $string .= '!' . $slen;
     $slen = strlen($string);
     $klen = strlen($key);
     $cipher = '';
