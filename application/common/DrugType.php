@@ -21,6 +21,24 @@ class DrugType
     ];
 
     /**
+     * 转成处方类别
+     * @param $code
+     * @return bool
+     */
+    public static function convertNoteCategory ($code)
+    {
+        if (self::isWestNeutralDrug($code)) {
+            return NoteCategory::WESTERN;
+        }
+        if ($code === self::CHINESE) {
+            return NoteCategory::CHINESE;
+        }
+        if ($code === self::MATERIAL) {
+            return NoteCategory::MATERIAL;
+        }
+    }
+
+    /**
      * 是否西药/中成药
      * @param $code
      * @return bool

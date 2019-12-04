@@ -398,6 +398,7 @@ class DoctorOrderModel extends Crud {
 
         $orderInfo['pay']      = round_dollar($orderInfo['pay']);
         $orderInfo['discount'] = round_dollar($orderInfo['discount']);
+        $orderInfo['refund']   = round_dollar($orderInfo['refund']);
 
         // 录音保存时间
         if ($orderInfo['voice']) {

@@ -532,6 +532,22 @@ class ServerClinic extends ActionPDO {
     }
 
     /**
+     * 搜索药品条形码
+     * @param *clinic_id 诊所
+     * @param *barcode 条形码
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function searchBarcode ()
+    {
+        return (new ServerClinicModel())->searchBarcode($_POST);
+    }
+
+    /**
      * 搜索批次
      * @param *clinic_id 诊所
      * @param *name 药品名称

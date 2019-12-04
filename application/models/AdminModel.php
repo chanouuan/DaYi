@@ -529,7 +529,7 @@ class AdminModel extends Crud {
         ], false, true)) {
             return false;
         }
-        if ($this->getDb()->table('admin_permission_role')->insert([
+        if (!$this->getDb()->table('admin_permission_role')->insert([
             'role_id' => $adminRoleId,
             'permission_id' => 1
         ])) {
@@ -543,7 +543,7 @@ class AdminModel extends Crud {
         ], false, true)) {
             return false;
         }
-        if ($this->getDb()->table('admin_permission_role')->insert([
+        if (!$this->getDb()->table('admin_permission_role')->insert([
             'role_id' => array_fill(0, 3, $doctorRoleId),
             'permission_id' => [2, 10, 11]
         ])) {

@@ -322,7 +322,7 @@ class ServerClinicModel extends Crud {
      */
     public function searchPatient ($post)
     {
-        $post['name'] = trim_space($post['name']);
+        $post['name'] = mb_substr(trim_space($post['name']), 0, 20);
         if (!$post['name'] || preg_match('/^\d+$/', $post['name'])) {
             return success([]);
         }
@@ -347,7 +347,7 @@ class ServerClinicModel extends Crud {
     public function searchBatch ($post)
     {
         $post['clinic_id'] = intval($post['clinic_id']);
-        $post['name']      = trim_space($post['name']);
+        $post['name']      = mb_substr(trim_space($post['name']), 0, 20);
         if (!$post['clinic_id'] || !$post['name']) {
             return success([]);
         }
@@ -368,13 +368,32 @@ class ServerClinicModel extends Crud {
     }
 
     /**
+     * 搜索药品条形码
+     * @return array
+     */
+    public function searchBarcode ($post)
+    {
+        $post['clinic_id'] = intval($post['clinic_id']);
+        $post['barcode']   = mb_substr(trim_space($post['barcode']), 0, 20);
+        if (!$post['clinic_id'] || !$post['barcode']) {
+            return error('条形码参数错误');
+        }
+        if (!$list = (new DrugModel(null, $post['clinic_id']))->search($post, null, 1)) {
+            return error('未找到「' . $post['barcode'] . '」匹配的药品');
+        }
+        $list = current($list);
+        $list['note_category'] = DrugType::convertNoteCategory($list['drug_type']);
+        return success($list);
+    }
+
+    /**
      * 搜索药品
      * @return array
      */
     public function searchDrug ($post)
     {
         $post['clinic_id'] = intval($post['clinic_id']);
-        $post['name']      = trim_space($post['name']);
+        $post['name']      = mb_substr(trim_space($post['name']), 0, 20);
         if (!$post['clinic_id'] || !$post['name']) {
             return success([]);
         }
@@ -401,7 +420,7 @@ class ServerClinicModel extends Crud {
      */
     public function searchDrugDict ($post)
     {
-        $post['name'] = trim_space($post['name']);
+        $post['name'] = mb_substr(trim_space($post['name']), 0, 20);
         if (!$post['name']) {
             return success([]);
         }
@@ -436,7 +455,7 @@ class ServerClinicModel extends Crud {
     public function searchTreatmentSheet ($post)
     {
         $post['clinic_id'] = intval($post['clinic_id']);
-        $post['name']      = trim_space($post['name']);
+        $post['name']      = mb_substr(trim_space($post['name']), 0, 20);
         if (!$post['clinic_id'] || !$post['name']) {
             return success([]);
         }

@@ -220,6 +220,9 @@ class DrugModel extends Crud {
             $condition['py_code'] = ['like', $post['name'] . '%', 'or'];
             $condition['wb_code'] = ['like', $post['name'] . '%', 'or', ')'];
         }
+        if ($post['barcode']) {
+            $condition['barcode'] = $post['barcode'];
+        }
         if ($post['is_procure']) {
             $condition['is_procure'] = 1;
         }
