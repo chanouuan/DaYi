@@ -158,7 +158,7 @@ class DoctorOrderModel extends Crud {
     {
         $post['order_id'] = intval($post['order_id']);
         $post['payway']   = OrderPayWay::isLocalPayWay($post['payway']) ? $post['payway'] : null;
-        $post['remark']   = trim_space($post['remark']);
+        $post['remark']   = trim_space($post['remark'], 0, 80);
         // notes 格式 [{id:1,back_amount:1}]
         $post['notes'] = $post['notes'] ? array_slice(json_decode(htmlspecialchars_decode($post['notes']), true), 0, 100) : [];
 
@@ -302,7 +302,7 @@ class DoctorOrderModel extends Crud {
         $post['second_money']  = $post['second_payway'] ? max(0, $post['second_money']) : 0;
         $post['second_money']  = $post['second_money'] * 100;
         $post['second_payway'] = $post['second_money'] ? $post['second_payway'] : null;
-        $post['remark']        = trim_space($post['remark']);
+        $post['remark']        = trim_space($post['remark'], 0, 80);
 
         if (!$post['payway']) {
             return error('请填写至少一种付款方式');
@@ -661,10 +661,8 @@ class DoctorOrderModel extends Crud {
         }
         $post = $post['result'];
 
-        // 生成取号号码
-        if (!$post['advanced']) {
-            $printCode = $this->buildPrintCode($this->userInfo['clinic_id']);
-        }
+        // 生成会诊号
+        $printCode = $post['advanced'] ? null : $this->buildPrintCode($this->userInfo['clinic_id']);
 
         // 生成会诊单
         if (!$orderId = $this->getDb()->transaction(function ($db) use ($post, $printCode) {
@@ -722,17 +720,17 @@ class DoctorOrderModel extends Crud {
     {
         $post['order_id']          = intval($post['order_id']);
         $post['doctor_id']         = intval($post['doctor_id']);
-        $post['patient_name']      = trim_space($post['patient_name']);
+        $post['patient_name']      = trim_space($post['patient_name'], 0, 20);
         $post['patient_gender']    = Gender::format($post['patient_gender']);
         $post['patient_gender']    = $post['patient_gender'] ? $post['patient_gender'] : null;
         $post['patient_age']       = Gender::validationAge($post['patient_age']);
-        $post['patient_tel']       = trim_space($post['patient_tel']);
-        $post['patient_complaint'] = trim_space($post['patient_complaint']);
-        $post['patient_allergies'] = trim_space($post['patient_allergies']);
-        $post['patient_diagnosis'] = trim_space($post['patient_diagnosis']);
+        $post['patient_tel']       = trim_space($post['patient_tel'], 0, 11);
+        $post['patient_complaint'] = trim_space($post['patient_complaint'], 0, 200);
+        $post['patient_allergies'] = trim_space($post['patient_allergies'], 0, 200);
+        $post['patient_diagnosis'] = trim_space($post['patient_diagnosis'], 0, 200);
         $post['note_dose']         = max(0, intval($post['note_dose']));
         $post['note_side']         = NoteSide::format($post['note_side']);
-        $post['advice']            = trim_space($post['advice']);
+        $post['advice']            = trim_space($post['advice'], 0, 200);
         $post['voice']             = ishttp($post['voice']) ? $post['voice'] : null;
         $post['notes']             = $post['notes'] ? array_slice(json_decode(htmlspecialchars_decode($post['notes']), true), 0, 30) : [];
 
@@ -786,6 +784,14 @@ class DoctorOrderModel extends Crud {
      */
     protected function buildPrintCode ($clinic_id)
     {
+        // 获取诊所
+        if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
+            return null;
+        }
+        // is_pc:是否自动打印会诊号
+        if (!$clinicInfo['is_pc']) {
+            return null;
+        }
         $code = (rand() % 10) . (rand() % 10) . (rand() % 10) . (rand() % 10);
         // 检查重复
         if ($this->getDb()->where(['clinic_id' => $clinic_id, 'print_code' => intval($code), 'status' => OrderStatus::NOPAY])->count()) {

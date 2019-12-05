@@ -39,12 +39,12 @@ class TreatmentModel extends Crud {
 
         $data = [];
         $data['clinic_id']     = $userInfo['clinic_id'];
-        $data['name']          = trim_space($post['name']);
-        $data['ident']         = trim_space($post['ident']);
+        $data['name']          = trim_space($post['name'], 0, 30);
+        $data['ident']         = trim_space($post['ident'], 0, 30);
         $data['price']         = max(0, intval(floatval($post['price']) * 100)); // 分
-        $data['unit']          = trim_space($post['unit']);
-        $data['py_code']       = $post['py_code'] ? trim_space($post['py_code']) : null;
-        $data['wb_code']       = $post['wb_code'] ? trim_space($post['wb_code']) : null;
+        $data['unit']          = trim_space($post['unit'], 0, 5);
+        $data['py_code']       = trim_space($post['py_code'], 0, 20);
+        $data['wb_code']       = trim_space($post['wb_code'], 0, 20);
         $data['royalty']       = Royalty::format($post['royalty']);
         $data['royalty_ratio'] = Royalty::checkRoyaltyRatio($data['royalty'], $post['royalty_ratio'], $data['price']);
         $data['is_special']    = $post['is_special'] ? 1 : 0;
@@ -122,9 +122,7 @@ class TreatmentModel extends Crud {
         if (!$info = $this->find(['id' => $id], 'id,ident,name,price,unit,royalty,royalty_ratio,wb_code,py_code,is_special,status')) {
             return [];
         }
-        $info['price']       = round_dollar($info['price']);
-        $info['is_special']  = $info['is_special'] ? '1' : '';
-        $info['status']      = $info['status'] ? '1' : '';
+        $info['price'] = round_dollar($info['price']);
         $info['royalty_ratio'] = Royalty::showRoyaltyRatio($info['royalty'], $info['royalty_ratio']);
         return $info;
     }

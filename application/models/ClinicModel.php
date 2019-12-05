@@ -17,7 +17,7 @@ class ClinicModel extends Crud {
     public function createPayed (array $post)
     {
         $post['clinic_id'] = intval($post['clinic_id']);
-        $post['payway']    = trim_space($post['payway']);
+        $post['payway']    = trim_space($post['payway'], 0, 20);
         $post['sale_id']   = intval($post['sale_id']);
 
         if (!$post['sale_id']) {
@@ -245,9 +245,10 @@ class ClinicModel extends Crud {
     public function saveClinicConfig ($user_id, array $post)
     {
         $data = [];
-        $data['name']    = mb_substr(trim_space($post['name']), 0, 20);
-        $data['tel']     = trim_space($post['tel']);
-        $data['address'] = mb_substr(trim_space($post['address']), 0, 80);
+        $data['name']    = trim_space($post['name'], 0, 20);
+        $data['tel']     = trim_space($post['tel'], 0, 11);
+        $data['address'] = trim_space($post['address'], 0, 80);
+        $data['is_pc']   = $post['is_pc'] ? 1 : 0;
 
         if ($data['tel'] && !validate_telephone($data['tel'])) {
             return error('手机号格式不正确');
@@ -283,12 +284,12 @@ class ClinicModel extends Crud {
      */
     public function regClinic (array $post)
     {
-        $post['name']        = mb_substr(trim_space($post['name']), 0, 30);
-        $post['address']     = mb_substr(trim_space($post['address']), 0, 200);
-        $post['telephone']   = trim_space($post['telephone']);
+        $post['name']        = trim_space($post['name'], 0, 30);
+        $post['address']     = trim_space($post['address'], 0, 80);
+        $post['telephone']   = trim_space($post['telephone'], 0, 11);
         $post['invite_code'] = strtolower(trim_space($post['invite_code'])); // 邀请码
-        $post['user_name']   = mb_substr(trim_space($post['user_name']), 0, 20); // 登录账号
-        $post['password']    = trim_space($post['password']); // 登录密码
+        $post['user_name']   = trim_space($post['user_name'], 0, 20); // 登录账号
+        $post['password']    = trim_space($post['password'], 0, 32); // 登录密码
 
         if (!$post['name']) {
             return error('诊所名称不能为空');

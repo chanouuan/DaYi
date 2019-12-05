@@ -120,27 +120,27 @@ class DrugModel extends Crud {
 
         $data = [];
         $data['clinic_id']       = $this->userInfo['clinic_id'];
-        $data['name']            = $post['name'] ? trim_space($post['name']) : null;
+        $data['name']            = trim_space($post['name'], 0, 30);
         $data['drug_type']       = DrugType::format($post['drug_type']);
-        $data['approval_num']    = $post['approval_num'] ? trim_space($post['approval_num']) : null;
-        $data['package_spec']    = $post['package_spec'] ? trim_space($post['package_spec']) : null;
-        $data['manufactor_name'] = $post['manufactor_name'] ? trim_space($post['manufactor_name']) : null;
+        $data['approval_num']    = trim_space($post['approval_num'], 0, 30);
+        $data['package_spec']    = trim_space($post['package_spec'], 0, 30);
+        $data['manufactor_name'] = trim_space($post['manufactor_name'], 0, 30);
         $data['basic_amount']    = $post['basic_amount'] ? max(0, intval($post['basic_amount'])) : null;
         $data['dosage_amount']   = $post['dosage_amount'] ? max(0, floatval($post['dosage_amount'])) : null;
-        $data['py_code']         = $post['py_code'] ? trim_space($post['py_code']) : null;
-        $data['wb_code']         = $post['wb_code'] ? trim_space($post['wb_code']) : null;
+        $data['py_code']         = trim_space($post['py_code'], 0, 20);
+        $data['wb_code']         = trim_space($post['wb_code'], 0, 20);
         $data['dosage_type']     = DrugDosage::format($post['dosage_type']);
-        $data['barcode']         = $post['barcode'] ? trim_space($post['barcode']) : null;
-        $data['goods_name']      = $post['goods_name'] ? trim_space($post['goods_name']) : null;
-        $data['standard_code']   = $post['standard_code'] ? trim_space($post['standard_code']) : null;
-        $data['drug_code']       = $post['drug_code'] ? trim_space($post['drug_code']): null;
+        $data['barcode']         = trim_space($post['barcode'], 0, 20);
+        $data['goods_name']      = trim_space($post['goods_name'], 0, 30);
+        $data['standard_code']   = trim_space($post['standard_code'], 0, 30);
+        $data['drug_code']       = trim_space($post['drug_code'], 0, 32);
         $data['retail_price']    = $post['retail_price'] ? max(0, intval(floatval($post['retail_price']) * 100)) : null;
         $data['is_antibiotic']   = DrugType::isWestNeutralDrug($data['drug_type']) ? ($post['is_antibiotic'] ? 1 : 0) : null;
         $data['usages']          = NoteUsage::format($post['usages']);
         $data['frequency']       = NoteFrequency::format($post['frequency']);
-        $data['basic_unit']      = $post['basic_unit'] ? trim_space($post['basic_unit']) : null;
-        $data['dosage_unit']     = $post['dosage_unit'] ? trim_space($post['dosage_unit']) : null;
-        $data['dispense_unit']   = $post['dispense_unit'] ? trim_space($post['dispense_unit']) : null;
+        $data['basic_unit']      = trim_space($post['basic_unit'], 0, 5);
+        $data['dosage_unit']     = trim_space($post['dosage_unit'], 0, 5);
+        $data['dispense_unit']   = trim_space($post['dispense_unit'], 0, 5);
 
         if (!$data['clinic_id']) {
             return error('门诊不能为空');
@@ -246,10 +246,8 @@ class DrugModel extends Crud {
         if (!$info = $this->find(['id' => $id], 'id,drug_type,approval_num,name,package_spec,manufactor_name,dispense_unit,basic_amount,basic_unit,dosage_unit,dosage_amount,py_code,wb_code,dosage_type,barcode,goods_name,standard_code,drug_code,retail_price,is_antibiotic,usages,frequency,status')) {
             return [];
         }
-        $info['drug_type']     = strval($info['drug_type']);
-        $info['retail_price']  = round_dollar($info['retail_price']);
-        $info['is_antibiotic'] = $info['is_antibiotic'] ? '1' : '';
-        $info['status']        = $info['status'] ? '1' : '';
+        $info['drug_type']    = strval($info['drug_type']);
+        $info['retail_price'] = round_dollar($info['retail_price']);
         return $info;
     }
 

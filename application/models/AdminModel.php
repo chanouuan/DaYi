@@ -5,6 +5,7 @@ namespace app\models;
 use app\common\CommonStatus;
 use app\common\Gender;
 use app\common\GenerateCache;
+use app\common\VipLevel;
 use Crud;
 
 class AdminModel extends Crud {
@@ -203,9 +204,8 @@ class AdminModel extends Crud {
         // 获取角色
         $roles = $this->getDb()->table('admin_role_user')->field('role_id')->where(['user_id' => $id])->select();
         $roles = $roles ? array_column($roles, 'role_id') :[];
-        $info['role_id']  = $roles;
-        $info['avatar']   = httpurl($info['avatar']);
-        $info['status']   = $info['status'] ? '1' : '';
+        $info['role_id'] = $roles;
+        $info['avatar']  = httpurl($info['avatar']);
         return $info;
     }
 
@@ -327,7 +327,7 @@ class AdminModel extends Crud {
         // 获取权限
         if (!$permissions = $this->getDb()
             ->table('admin_permission_role permission_role inner join admin_permissions permissions on permissions.id = permission_role.permission_id')
-            ->field('permissions.id,permissions.name,permissions.if_vip')
+            ->field('permissions.id,permissions.name,permissions.vip_limit')
             ->where(['permission_role.role_id' => ['in', $roles]])
             ->select()) {
             return [];
@@ -335,8 +335,8 @@ class AdminModel extends Crud {
 
         // 验证 vip 授权
         foreach ($permissions as $k => $v) {
-            if ($v['if_vip']) {
-                if (!in_array($vip_level, json_decode($v['if_vip'], true))) {
+            if ($v['vip_limit']) {
+                if (!in_array($vip_level, json_decode($v['vip_limit'], true))) {
                     unset($permissions[$k]);
                 }
             }
@@ -413,12 +413,12 @@ class AdminModel extends Crud {
 
         $data = [];
         $data['clinic_id'] = $userInfo['clinic_id'];
-        $data['user_name'] = trim_space($post['user_name']);
-        $data['password']  = trim_space($post['password']);
+        $data['user_name'] = trim_space($post['user_name'], 0, 20);
+        $data['password']  = trim_space($post['password'], 0, 32);
         $data['gender']    = Gender::format($post['gender']);
-        $data['telephone'] = $post['telephone'] ? trim_space($post['telephone']) : null;
-        $data['full_name'] = $post['full_name'] ? trim_space($post['full_name']) : null;
-        $data['title']     = $post['title'] ? trim_space($post['title']) : null;
+        $data['telephone'] = trim_space($post['telephone'], 0, 11);
+        $data['full_name'] = trim_space($post['full_name'], 0, 20);
+        $data['title']     = trim_space($post['title'], 0, 20);
 
         if (!$data['clinic_id']) {
             return error('诊所不能为空');
@@ -517,6 +517,154 @@ class AdminModel extends Crud {
     }
 
     /**
+     * 获取角色列表
+     * @return array
+     */
+    public function getRoleList ($user_id, array $post)
+    {
+        $post['page_size'] = max(6, $post['page_size']);
+        $post['name']      = trim_space($post['name']);
+
+        // 用户获取
+        $userInfo = $this->checkAdminInfo($user_id);
+
+        $condition = [
+            'clinic_id' => $userInfo['clinic_id']
+        ];
+        if ($post['name']) {
+           $condition['name'] = $post['name'];
+        }
+        if (!is_null(CommonStatus::format($post['status']))) {
+            $condition['status'] = $post['status'];
+        }
+
+        $count = $this->getDb()->table('admin_roles')->where($condition)->count();
+        if ($count > 0) {
+            $pagesize = getPageParams($post['page'], $count, $post['page_size']);
+            $list = $this->getDb()->field('id,name,description,is_admin,status')->table('admin_roles')->where($condition)->order('id desc')->limit($pagesize['limitstr'])->select();
+        }
+
+        return success([
+            'total_count' => $count,
+            'page_size' => $post['page_size'],
+            'list' => $list ? $list : []
+        ]);
+    }
+
+    /**
+     * 查看角色
+     * @return array
+     */
+    public function viewRole ($id)
+    {
+        $id = intval($id);
+
+        if ($id === 1) {
+            return error('不能查看该角色');
+        }
+
+        if (!$roleInfo = $this->getDb()->field('id,name,description,status')->table('admin_roles')->where(['id' => $id])->find()) {
+            return error('该角色不存在');
+        }
+
+        // 获取角色权限
+        $rolePermission = $this->getDb()->field('permission_id')->table('admin_permission_role')->where(['role_id' => $id])->select();
+        $rolePermission = array_column($rolePermission, 'permission_id');
+        $roleInfo['permission'] = $rolePermission;
+
+        return success($roleInfo);
+    }
+
+    /**
+     * 查看权限
+     * @return array
+     */
+    public function viewPermissions ()
+    {
+        $permissions = $this->getDb()->table('admin_permissions')->field('id,vip_limit,description')->where(['id' => ['>1']])->select();
+        // 显示 vip 限制
+        foreach ($permissions as $k => $v) {
+            $v['vip_limit'] = $v['vip_limit'] ? json_decode($v['vip_limit'], true) : [];
+            foreach ($v['vip_limit'] as $kk => $vv) {
+                $v['vip_limit'][$kk] = VipLevel::getMessage($vv);
+            }
+            $permissions[$k]['vip_limit'] = $v['vip_limit'];
+        }
+        return success($permissions);
+    }
+
+    /**
+     * 添加角色
+     * @return array
+     */
+    public function saveRole ($user_id, array $post)
+    {
+        $userInfo = $this->checkAdminInfo($user_id);
+
+        $post['id']         = intval($post['id']);
+        $post['status']     = intval($post['status']);
+        $post['permission'] = get_short_array($post['permission']);
+
+        // 去掉 ANY 权限
+        foreach ($post['permission'] as $k => $v) {
+            if ($v === 1) {
+                unset($post['permission'][$k]);
+            }
+        }
+        $post['permission'] = array_values($post['permission']);
+
+        $data = [];
+        $data['clinic_id']    = $userInfo['clinic_id'];
+        $data['name']         = trim_space($post['name'], 0, 20);
+        $data['description']  = trim_space($post['description'], 0, 50);
+
+        if (!$data['clinic_id']) {
+            return error('诊所不能为空');
+        }
+        if (!$data['name']) {
+            return error('角色名称不能为空');
+        }
+        if (!$post['permission']) {
+            return error('角色权限不能为空');
+        }
+
+        // 新增 or 编辑
+        if ($post['id']) {
+            if (!is_null(CommonStatus::format($post['status']))) {
+                $data['status'] = $post['status'];
+            }
+            $data['update_time'] = date('Y-m-d H:i:s', TIMESTAMP);
+            if (!$this->getDb()->table('admin_roles')->where(['id' => $post['id'], 'clinic_id' => $data['clinic_id']])->update($data)) {
+                return error('角色保存失败');
+            }
+        } else {
+            $data['create_time'] = date('Y-m-d H:i:s', TIMESTAMP);
+            if (!$post['id'] = $this->getDb()->table('admin_roles')->insert($data, false, true)) {
+                return error('角色添加失败');
+            }
+        }
+
+        // 添加角色权限
+        $rolePermission = $this->getDb()->field('permission_id')->table('admin_permission_role')->where(['role_id' => $post['id']])->select();
+        $rolePermission = $rolePermission ? array_column($rolePermission, 'permission_id') : [];
+        $curd  = array_curd($rolePermission, $post['permission']);
+        if ($curd['add']) {
+            $this->getDb()->table('admin_permission_role')->insert([
+                'role_id' => array_fill(0, count($curd['add']), $post['id']),
+                'permission_id' => $curd['add']
+            ]);
+        }
+        if ($curd['delete']) {
+            $this->getDb()->table('admin_permission_role')->where([
+                'role_id' => $post['id'],
+                'permission_id' => ['in', $curd['delete']]
+            ])->delete();
+        }
+
+        return success('ok');
+    }
+
+    /**
      * 新增初始管理员
      * @return bool
      */
@@ -525,13 +673,17 @@ class AdminModel extends Crud {
         // 新增管理员角色
         if (!$adminRoleId = $this->getDb()->table('admin_roles')->insert([
             'clinic_id' => $post['clinic_id'],
-            'name' => '管理员'
+            'name' => '管理员',
+            'is_admin' => 1
         ], false, true)) {
             return false;
         }
+        $permissions = GenerateCache::getPermissions();
+        unset($permissions[1]); // 去掉 ANY 权限
+        $permissions = array_keys($permissions);
         if (!$this->getDb()->table('admin_permission_role')->insert([
-            'role_id' => $adminRoleId,
-            'permission_id' => 1
+            'role_id' => array_fill(0, count($permissions), $adminRoleId),
+            'permission_id' => $permissions
         ])) {
             return false;
         }

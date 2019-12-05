@@ -334,7 +334,7 @@ class StockModel extends Crud {
     public function editStock (array $post)
     {
         $post['stock_id'] = intval($post['stock_id']);
-        $post['invoice']  = trim_space($post['invoice']);
+        $post['invoice']  = trim_space($post['invoice'], 0, 20);
 
         if (!$stockInfo = $this->find(['id' => $post['stock_id'], 'clinic_id' => $this->userInfo['clinic_id']], 'id')) {
             return error('出入库单不存在');
@@ -568,9 +568,9 @@ class StockModel extends Crud {
         $post['stock_date']  = strtotime($post['stock_date']);
         $post['stock_date']  = $post['stock_date'] ? date('Y-m-d', $post['stock_date']) : null;
         $post['stock_way']   = StockWay::format($post['stock_way']);
-        $post['supplier']    = trim_space($post['supplier']);
-        $post['invoice']     = trim_space($post['invoice']);
-        $post['remark']      = trim_space($post['remark']);
+        $post['supplier']    = trim_space($post['supplier'], 0, 50);
+        $post['invoice']     = trim_space($post['invoice'], 0, 50);
+        $post['remark']      = trim_space($post['remark'], 0, 200);
         $post['employee_id'] = $post['employee_id'] ? intval($post['employee_id']) : null;
         $post['details']     = $post['details'] ? array_slice(json_decode(htmlspecialchars_decode($post['details']), true), 0, 1000) : [];
 
@@ -609,10 +609,10 @@ class StockModel extends Crud {
             $details[$k]['amount']          = max(0, intval($v['amount']));
             $details[$k]['amount']          = $stock_type == StockType::PUSH ? 0 - $details[$k]['amount'] : $details[$k]['amount'];
             $details[$k]['purchase_price']  = $stock_type == StockType::PUSH ? null : max(0, intval(floatval($v['purchase_price']) * 100));
-            $details[$k]['batch_number']    = trim_space($v['batch_number'], '');
+            $details[$k]['batch_number']    = trim_space($v['batch_number'], 0, 20, '');
             $details[$k]['valid_time']      = strtotime($v['valid_time']);
             $details[$k]['valid_time']      = $details[$k]['valid_time'] ? date('Y-m-d', $details[$k]['valid_time']) : null;
-            $details[$k]['manufactor_name'] = trim_space($v['manufactor_name']);
+            $details[$k]['manufactor_name'] = trim_space($v['manufactor_name'], 0, 30);
             if (!$details[$k]['drug_id'] || !$details[$k]['amount']) {
                 return false;
             }

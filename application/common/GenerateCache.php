@@ -21,19 +21,29 @@ class GenerateCache
         if (empty($permissions)) {
             return [];
         }
-        if (false === F('map_permissions')) {
+        $list = self::getPermissions();
+        foreach ($permissions as $k => $v) {
+            $permissions[$k] = isset($list[$v]) ? $list[$v] : null;
+        }
+        return array_values(array_filter($permissions));
+    }
+
+    /**
+     * 获取所有权限
+     * @return array
+     */
+    public static function getPermissions ()
+    {
+        if (false === F('permissions')) {
             $list = DB::getInstance()
                 ->table('admin_permissions')
                 ->field('id,name')
                 ->select();
             $list = array_column($list, 'name', 'id');
-            F('map_permissions', $list);
+            F('permissions', $list);
+            return $list;
         }
-        $list = F('map_permissions');
-        foreach ($permissions as $k => $v) {
-            $permissions[$k] = isset($list[$v]) ? $list[$v] : null;
-        }
-        return array_values(array_filter($permissions));
+        return F('permissions');
     }
 
     /**
@@ -46,9 +56,7 @@ class GenerateCache
         if (!$clinic_id) {
             return false;
         }
-
         $keyName = 'clinic_chunk' . ($clinic_id % 100);
-
         return F($keyName, null);
     }
 
@@ -68,7 +76,7 @@ class GenerateCache
         if (false === F($keyName)) {
             if (!$clinicInfo = DB::getInstance()
                 ->table('dayi_clinic')
-                ->field('id,db_instance,db_chunk,is_ds,is_cp,is_rp,vip_level,expire_date,daily_cost,status')
+                ->field('id,db_instance,db_chunk,is_ds,is_cp,is_rp,is_pc,vip_level,expire_date,daily_cost,status')
                 ->where(['id' => $clinic_id])
                 ->limit(1)
                 ->find()) {
@@ -82,7 +90,7 @@ class GenerateCache
             } else {
                 if (!$clinicInfo = DB::getInstance()
                     ->table('dayi_clinic')
-                    ->field('id,db_instance,db_chunk,is_ds,is_cp,is_rp,vip_level,expire_date,daily_cost,status')
+                    ->field('id,db_instance,db_chunk,is_ds,is_cp,is_rp,is_pc,vip_level,expire_date,daily_cost,status')
                     ->where(['id' => $clinic_id])
                     ->limit(1)
                     ->find()) {

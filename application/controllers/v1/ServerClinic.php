@@ -45,6 +45,10 @@ class ServerClinic extends ActionPDO {
             'saveTreatment'        => ['interval' => 1000],
             'getEmployeeList'      => ['interval' => 200],
             'saveEmployee'         => ['interval' => 1000],
+            'getRoleList'          => ['interval' => 200],
+            'saveRole'             => ['interval' => 1000],
+            'viewRole'             => ['interval' => 1000],
+            'viewPermissions'      => ['interval' => 1000],
             'addStock'             => ['interval' => 1000],
             'editStock'            => ['interval' => 1000],
             'getStockPullOrPush'   => ['interval' => 200],
@@ -86,6 +90,8 @@ class ServerClinic extends ActionPDO {
                 'saveTreatment'      => 'saveDrug',
                 'getEmployeeList'    => 'saveEmployee',
                 'getEmployeeRole'    => 'saveEmployee',
+                'getRoleList'        => 'saveEmployee',
+                'saveRole'           => 'saveEmployee',
                 'getStockList'       => 'addStock',
                 'getStockPullOrPush' => 'addStock',
                 'getStockSale'       => 'addStock',
@@ -942,6 +948,67 @@ class ServerClinic extends ActionPDO {
     public function getEmployeeRole ()
     {
         return success((new AdminModel())->getEmployeeRole($this->_G['user']['user_id']));
+    }
+
+    /**
+     * 获取角色列表
+     * @login
+     * @param page 当前页
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{
+     *     "total":1, //总条数
+     *     "list":[]
+     * }}
+     */
+    public function getRoleList ()
+    {
+        return (new AdminModel())->getRoleList($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 添加角色
+     * @login
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function saveRole ()
+    {
+        return (new AdminModel())->saveRole($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 查看角色
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function viewRole ()
+    {
+        return (new AdminModel())->viewRole(getgpc('id'));
+    }
+
+    /**
+     * 查看权限
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function viewPermissions ()
+    {
+        return (new AdminModel())->viewPermissions();
     }
 
     /**

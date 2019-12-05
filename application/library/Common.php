@@ -203,11 +203,13 @@ function pass_string ($str)
     return !empty($str) ? preg_replace('/^(.+)(.{4})?(.{4})?$/Us', '\\1****\\3', $str) : $str;
 }
 
-function trim_space ($string, $default = null)
+function trim_space ($string, int $start = null, int $length = null, $default = null)
 {
-    return $string ? str_replace([
-            '　', ' ', "\r", "\n", "\t"
-    ], '', trim($string)) : $default;
+    $string = $string ? str_replace(['　', ' ', "\r", "\n", "\t"], '', trim($string)) : $default;
+    if ($string && !is_null($start)) {
+        $string = mb_substr($string, $start, $length);
+    }
+    return $string;
 }
 
 function ishttp ($url)
