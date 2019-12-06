@@ -279,16 +279,35 @@ class DrugModel extends Crud {
         }
 
         $count = $this->count($condition);
+        $list  = [];
         if ($count > 0) {
-            $pagesize = getPageParams($post['page'], $count, $post['page_size']);
-            $list = $this->select($condition, 'id,drug_type,name,package_spec,dispense_unit,purchase_price,retail_price,amount,manufactor_name,status', 'id desc', $pagesize['limitstr']);
-            if ($list) {
-                foreach ($list as $k => $v) {
-                    $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
-                    $list[$k]['retail_price']   = round_dollar($v['retail_price']);
-                    $list[$k]['type_name']      = DrugType::getMessage($v['drug_type']);
-                }
+            if (!$post['export']) {
+                $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             }
+            $list = $this->select($condition, 'id,drug_type,name,package_spec,dispense_unit,purchase_price,retail_price,amount,manufactor_name,status', 'id desc', $pagesize['limitstr']);
+            foreach ($list as $k => $v) {
+                $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
+                $list[$k]['retail_price']   = round_dollar($v['retail_price']);
+                $list[$k]['type_name']      = DrugType::getMessage($v['drug_type']);
+            }
+        }
+
+        // 导出
+        if ($post['export']) {
+            $input = [];
+            foreach ($list as $k => $v) {
+                $input[] = [
+                    $v['id'], 
+                    $v['name'], 
+                    $v['type_name'], 
+                    $v['package_spec'], 
+                    $v['manufactor_name'], 
+                    $v['retail_price'], 
+                    $v['purchase_price'], 
+                    $v['amount'] . $v['dispense_unit']
+                ];
+            }
+            $this->exportCsv('库存列表', '编号,名称,类型,规格,厂家,零售价,进货价,库存', $input);
         }
 
         return success([
@@ -296,6 +315,34 @@ class DrugModel extends Crud {
             'page_size' => $post['page_size'],
             'list' => $list ? $list : []
         ]);
+    }
+
+    /**
+     * 导出为 csv
+     * @return fixed
+     */
+    private function exportCsv ($fileName, $header, array $list)
+    {
+        $fileName = $fileName . '_' . date('Ymd', TIMESTAMP);
+        $fileName = preg_match('/(Chrome|Firefox)/i', $_SERVER['HTTP_USER_AGENT']) && !preg_match('/edge/i', $_SERVER['HTTP_USER_AGENT']) ? $fileName : urlencode($fileName);
+
+        header('cache-control:public');
+        header('content-type:application/octet-stream');
+        header('content-disposition:attachment; filename=' . $fileName . '.csv');
+
+        $input = [$header];
+        foreach ($list as $k => $v) {
+            foreach ($v as $kk => $vv) {
+                if (false !== strpos($vv, ',')) {
+                    $v[$kk] = '"' . $vv . '"';
+                }
+            }
+            $input[] = implode(',', $v);
+        }
+        unset($list);
+
+        echo mb_convert_encoding(implode("\n", $input), 'GB2312', 'UTF-8');
+        exit(0);
     }
 
 }

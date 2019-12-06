@@ -54,8 +54,11 @@ class StockModel extends Crud {
         }
 
         $count = $this->count($condition);
+        $list  = [];
         if ($count > 0) {
-            $pagesize = getPageParams($post['page'], $count, $post['page_size']);
+            if (!$post['export']) {
+                $pagesize = getPageParams($post['page'], $count, $post['page_size']);
+            }
             $list = $this->select($condition, 'id,stock_type,stock_way,supplier,employee_id,purchase_price,create_admin_id,confirm_admin_id,stock_date,status', 'id desc', $pagesize['limitstr']);
             if ($list) {
                 // 获取用户姓名
@@ -71,6 +74,42 @@ class StockModel extends Crud {
                 }
                 unset($admins);
             }
+        }
+
+        // 导出
+        if ($post['export']) {
+            $input = [];
+            if ($post['stock_type'] == StockType::PULL) {
+                // 入库
+                foreach ($list as $k => $v) {
+                    $input[] = [
+                        $v['id'], 
+                        $v['stock_date'], 
+                        $v['stock_way'], 
+                        $v['supplier'], 
+                        $v['create_admin_name'], 
+                        $v['confirm_admin_name'], 
+                        $v['purchase_price'], 
+                        $v['status'] === 1 ? '已确认' : '未确认'
+                    ];
+                }
+                $this->exportCsv('入存列表', '编号,入库日期,入库方式,供应商,制单人,确认人,入库总金额,状态', $input);
+            } else if ($post['stock_type'] == StockType::PUSH) {
+                // 出库
+                foreach ($list as $k => $v) {
+                    $input[] = [
+                        $v['id'], 
+                        $v['stock_date'], 
+                        $v['stock_way'], 
+                        $v['employee_name'], 
+                        $v['create_admin_name'], 
+                        $v['confirm_admin_name'], 
+                        $v['status'] === 1 ? '已确认' : '未确认'
+                    ];
+                }
+                $this->exportCsv('入存列表', '编号,出库日期,出库方式,领用人员,制单人,确认人,状态', $input);
+            }
+            exit(0);
         }
 
         return success([
@@ -708,6 +747,34 @@ class StockModel extends Crud {
             $list[$v['drug_id']]['amount'] += $v['amount'];
         }
         return $list;
+    }
+
+    /**
+     * 导出为 csv
+     * @return fixed
+     */
+    private function exportCsv ($fileName, $header, array $list)
+    {
+        $fileName = $fileName . '_' . date('Ymd', TIMESTAMP);
+        $fileName = preg_match('/(Chrome|Firefox)/i', $_SERVER['HTTP_USER_AGENT']) && !preg_match('/edge/i', $_SERVER['HTTP_USER_AGENT']) ? $fileName : urlencode($fileName);
+
+        header('cache-control:public');
+        header('content-type:application/octet-stream');
+        header('content-disposition:attachment; filename=' . $fileName . '.csv');
+
+        $input = [$header];
+        foreach ($list as $k => $v) {
+            foreach ($v as $kk => $vv) {
+                if (false !== strpos($vv, ',')) {
+                    $v[$kk] = '"' . $vv . '"';
+                }
+            }
+            $input[] = implode(',', $v);
+        }
+        unset($list);
+
+        echo mb_convert_encoding(implode("\n", $input), 'GB2312', 'UTF-8');
+        exit(0);
     }
 
 }
