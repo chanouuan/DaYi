@@ -10,6 +10,7 @@ use app\models\TreatmentModel;
 use app\models\DrugModel;
 use app\models\StockModel;
 use app\models\ClinicModel;
+use app\models\FeedbackModel;
 use app\models\ServerClinicModel;
 use app\common\GenerateCache;
 
@@ -61,7 +62,9 @@ class ServerClinic extends ActionPDO {
             'checkVipState'        => ['interval' => 1000],
             'getVipSale'           => ['interval' => 1000],
             'createPayed'          => ['interval' => 1000],
-            'indexCount'           => ['interval' => 1000]
+            'notifyPayed'          => ['interval' => 1000],
+            'indexCount'           => ['interval' => 1000],
+            'feedback'             => ['interval' => 1000]
         ];
     }
 
@@ -78,7 +81,8 @@ class ServerClinic extends ActionPDO {
                 'getDoctorList',
                 'printTemplete',
                 'getDoctorOrderDetail',
-                'getDrugInfo'
+                'getDrugInfo',
+                'feedback'
             ];
             // 重命名
             $map = [
@@ -1249,6 +1253,21 @@ class ServerClinic extends ActionPDO {
     }
 
     /**
+     * 生成收款码
+     * @param trade_id trade_id
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":{}
+     * }
+     */
+    public function notifyPayed ()
+    {
+        return (new ClinicModel())->notifyPayed($_POST);
+    }
+
+    /**
      * 首页统计
      * @return array
      * {
@@ -1260,6 +1279,21 @@ class ServerClinic extends ActionPDO {
     public function indexCount ()
     {
         return (new ServerClinicModel())->indexCount(getgpc('clinic_id'));
+    }
+
+    /**
+     * 意见反馈
+     * @login
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function feedback ()
+    {
+        return (new FeedbackModel())->feedback($this->_G['user']['user_id'], $_POST);
     }
 
 }

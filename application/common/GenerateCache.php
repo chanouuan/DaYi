@@ -102,14 +102,6 @@ class GenerateCache
             unset($list);
         }
 
-        // vip等级0、1不提供库存功能，所以关闭库存相关配置
-        if (isset($clinicInfo['vip_level'])) {
-            if ($clinicInfo['vip_level'] <= VipLevel::SIMPLE) {
-                $clinicInfo['is_ds'] = 0;
-                $clinicInfo['is_cp'] = 0;
-                $clinicInfo['is_rp'] = 0;
-            }
-        }
         // 检查过期
         if (isset($clinicInfo['expire_date'])) {
             $clinicInfo['vip_expire'] = strtotime($clinicInfo['expire_date'] . '23:59:59') > TIMESTAMP ? 0 : 1;

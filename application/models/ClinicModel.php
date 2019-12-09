@@ -11,6 +11,30 @@ class ClinicModel extends Crud {
     protected $table = 'dayi_clinic';
 
     /**
+     * 回调支付通知
+     * @return array
+     */
+    public function notifyPayed (array $post)
+    {
+        $post['trade_id'] = intval($post['trade_id']);
+
+        if (!$post['trade_id']) {
+            return error('交易单不存在');
+        }
+
+        $tradeInfo = $this->getDb()
+            ->table('__tablepre__trades')
+            ->field('status')
+            ->where(['id' => $post['trade_id']])
+            ->limit(1)
+            ->find();
+
+        return success([
+            'pay_status' => $tradeInfo && $tradeInfo['status'] === 1 ? 1 : 0
+        ]);
+    }
+
+    /**
      * 生成收款码
      * @return array
      */
@@ -66,6 +90,11 @@ class ClinicModel extends Crud {
         }
         $price = $saleInfo['price'] > $diff ? $saleInfo['price'] - $diff : 0; // 应付金额
 
+        // 前期没有申请支付，暂时去掉升配补差价
+        if ($changeLevel === 1 && $clinicInfo['use_days'] > 0 && $price > 0) {
+            return error('非常抱歉，暂不支持有效期内升配功能！');
+        }
+
         $mark = [
             'clinic_id'   => $clinicInfo['id'],
             'vip_level'   => $saleInfo['vip_level'],
@@ -84,6 +113,9 @@ class ClinicModel extends Crud {
         // 计算每日费用
         $mark['daily_cost'] = bcdiv($saleInfo['price'], ceil(bcdiv(strtotime($mark['expire_date']) - $beginTime, 86400, 6)));
 
+        // 生成订单号
+        $orderCode = $this->generateOrderCode($clinicInfo['id']);
+
         // 生成交易单
         if (!$tradeId = $this->getDb()->table('__tablepre__trades')->insert([
             'source'      => 'vip',
@@ -92,7 +124,7 @@ class ClinicModel extends Crud {
             'money'       => $price,
             'payway'      => $post['payway'],
             'mark'        => json_encode($mark),
-            'order_code'  => $this->generateOrderCode($clinicInfo['id']),
+            'order_code'  => $orderCode,
             'create_time' => date('Y-m-d H:i:s', TIMESTAMP)
         ], false ,true)) {
             return error('交易单保存失败');
@@ -104,6 +136,13 @@ class ClinicModel extends Crud {
             if ($res['errorcode'] !== 0) {
                 return $res;
             }
+        } else {
+            // 获取付款二维码
+            $paycode = '/static/paycode/' . round_dollar($price) . '.png';
+            if (!file_exists(APPLICATION_PATH . '/public' . $paycode)) {
+                return error('付款二维码未生成');
+            }
+            $paycode = httpurl(APPLICATION_URL . $paycode) . '?t=' . TIMESTAMP;
         }
 
         return success([
@@ -111,7 +150,8 @@ class ClinicModel extends Crud {
             'pay'         => round_dollar($price),
             'pay_status'  => $price === 0 ? 1 : 0,
             'vip_msg'     => VipLevel::getMessage($mark['vip_level']),
-            'expire_date' => $mark['expire_date']
+            'expire_date' => $mark['expire_date'],
+            'paycode'     => $paycode
         ]);
     }
 
@@ -175,6 +215,7 @@ class ClinicModel extends Crud {
         if (!$clinicInfo = GenerateCache::getClinic($post['clinic_id'])) {
             return error('当前诊所未找到');
         }
+        unset($clinicInfo['db_chunk'], $clinicInfo['db_instance']);
 
         // 获取剩余天数
         $clinicInfo['next_msg']   = VipLevel::getMessage($post['level']);
@@ -230,6 +271,7 @@ class ClinicModel extends Crud {
         if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
             return error('当前诊所未找到');
         }
+        unset($clinicInfo['db_chunk'], $clinicInfo['db_instance']);
 
         $clinicInfo['vip_msg']  = VipLevel::getMessage($clinicInfo['vip_level']);
         $clinicInfo['use_date'] = VipLevel::getUseDate($clinicInfo['expire_date']);
@@ -248,6 +290,9 @@ class ClinicModel extends Crud {
         $data['name']    = trim_space($post['name'], 0, 20);
         $data['tel']     = trim_space($post['tel'], 0, 11);
         $data['address'] = trim_space($post['address'], 0, 80);
+        $data['is_ds']   = $post['is_ds'] ? 1 : 0;
+        $data['is_cp']   = $post['is_cp'] ? 1 : 0;
+        $data['is_rp']   = $post['is_rp'] ? 1 : 0;
         $data['is_pc']   = $post['is_pc'] ? 1 : 0;
 
         if ($data['tel'] && !validate_telephone($data['tel'])) {
@@ -258,13 +303,6 @@ class ClinicModel extends Crud {
 
         if (!$clinicInfo = GenerateCache::getClinic($userInfo['clinic_id'])) {
             return error('当前诊所未找到');
-        }
-
-        // vip等级0、1不提供库存功能，所以不能修改库存相关配置
-        if ($clinicInfo['vip_level'] > VipLevel::SIMPLE) {
-            $data['is_ds'] = $post['is_ds'] ? 1 : 0;
-            $data['is_cp'] = $post['is_cp'] ? 1 : 0;
-            $data['is_rp'] = $post['is_rp'] ? 1 : 0;
         }
 
         if (false === ($result = $this->getDb()->where(['id' => $userInfo['clinic_id']])->update($data))) {

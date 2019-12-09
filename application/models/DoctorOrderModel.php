@@ -72,10 +72,22 @@ class DoctorOrderModel extends Crud {
         }
         $orderInfo = $orderInfo['result'];
 
+        $clinicInfo = (new ClinicModel())->find(['id' => $this->userInfo['clinic_id']], 'name');
+        $orderInfo['clinic_name'] = $clinicInfo['name'];
+
+        $adminInfo = (new AdminModel())->getAdminInfo($orderInfo['charge_user_id']);
+        $orderInfo['charge_user_name'] = $adminInfo['nickname'];
+
+        $orderInfo['patient_name'] = $orderInfo['patient_name'] ? $orderInfo['patient_name'] : '无';
+        $orderInfo['patient_gender'] = Gender::getMessage($orderInfo['patient_gender']);
+        $orderInfo['create_time'] = substr($orderInfo['create_time'], 0, 10);
+        $orderInfo['payway'] = implode(',', array_column($orderInfo['payway'], 'payway'));
+
+        $orderInfo['print_time'] = date('Y-m-d H:i:s', TIMESTAMP);
         if (!$content = $this->parsePrintTemplete($type, $orderInfo)) {
             return error('模板不存在');
         }
-
+        
         return success([
             'content' => $content
         ]);
@@ -392,7 +404,7 @@ class DoctorOrderModel extends Crud {
     {
         $order_id = intval($order_id);
 
-        if (!$orderInfo = $this->find(['id' => $order_id, 'clinic_id' => $this->userInfo['clinic_id']], 'id,doctor_id,enum_source,print_code,patient_name,patient_tel,patient_gender,patient_age,patient_complaint,patient_allergies,patient_diagnosis,note_dose,note_side,advice,voice,pay,discount,refund,payway,status,create_time')) {
+        if (!$orderInfo = $this->find(['id' => $order_id, 'clinic_id' => $this->userInfo['clinic_id']], 'id,doctor_id,enum_source,print_code,patient_name,patient_tel,patient_gender,patient_age,patient_complaint,patient_allergies,patient_diagnosis,note_dose,note_side,advice,voice,pay,discount,refund,payway,status,create_time,charge_user_id')) {
             return error('订单不存在');
         }
 

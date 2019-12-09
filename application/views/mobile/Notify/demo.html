@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<style type="text/css">
+    table{
+        width: 100%;
+    }
+    table td,th{
+        text-align: left;
+        border: 1px solid #0a0a0a;
+    }
+</style>
+<body>
+<form action="?" method="get">
+    <input type="text" placeholder="支付金额（元）" name="pay" value="<?=$_GET['pay']?>">
+    <button type="submit">搜索</button>
+</form>
+<br>
+<table>
+    <tr>
+        <th>ID</th>
+        <th>单号</th>
+        <th>诊所</th>
+        <th>支付金额</th>
+        <th>时间</th>
+        <th>状态</th>
+        <th>操作</th>
+    </tr>
+    <?php foreach($list as $k=>$v){ ?>
+    <tr>
+        <td><?=$v['id']?></td>
+        <td><?=$v['order_code']?></td>
+        <td><?=$v['clinic_name']?></td>
+        <td><?=$v['pay']/100?></td>
+        <td><?=$v['create_time']?></td>
+        <td><?=$v['status']==1?'已付款':'<b style="color:red">未付款</b>'?></td>
+        <td>
+            <?php if($v['status']==0){ ?>
+            <a onclick="return confirm('是否确认收款？')" href="<?=gurl('/notify/payed',['trade_id'=>$v['id']])?>">已收款</a>
+            <?php } ?>
+        </td>
+    </tr>
+    <?php } ?>
+</table>
+
+<div>
+    共 <?=$pagesize['totalcount']?> 条记录
+    <div style="text-align: center; margin:10px; font-size:14px">
+        <?php if($pagesize['totalpage']){ ?>
+        <ul style="list-style: none;">
+            <?php foreach($pagesize['scrollpage'] as $k=>$v){ ?>
+            <li style="float: left; width: 30px; line-height: 30px; border: 1px solid #ccc; margin: 10px; <?php if($pagesize['page']==$k){ ?>background-color:#ccc;<?php } ?>"><a href="?<?=burl('page='.$k)?>"><?=$v?></a></li>
+            <?php } ?>
+        </ul>
+        <?php } ?>
+    </div>
+</div>
+</body>
+</html>
