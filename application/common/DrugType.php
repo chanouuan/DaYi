@@ -21,6 +21,52 @@ class DrugType
     ];
 
     /**
+     * 换算成库存数量
+     * @param $drug_type 药品类型
+     * @param $amount 药品数量
+     * @param $basic_amount 制剂数量
+     * @return int
+     */
+    public static function convertStockAmount ($drug_type, $amount, $basic_amount)
+    {
+        if (!$amount || !self::isWestNeutralDrug($drug_type)) {
+            return $amount;
+        }
+        return intval(bcdiv($amount, $basic_amount));
+    }
+
+    /**
+     * 显示药品数量
+     * @param $drug_type 药品类型
+     * @param $amount 药品数量
+     * @param $basic_amount 制剂数量
+     * @param $dispense_unit 库存单位
+     * @param $basic_unit 制剂单位
+     * @return string
+     */
+    public static function showAmount ($drug_type, $amount, $basic_amount, $dispense_unit, $basic_unit)
+    {
+        if (!$amount || !self::isWestNeutralDrug($drug_type)) {
+            return $amount . $dispense_unit;
+        }
+        $left  = abs(bcdiv($amount, $basic_amount));
+        $right = abs(bcmod($amount, $basic_amount));
+        $str   = [];
+        if ($amount < 0) {
+            $str[] = '-';
+        }
+        if ($left > 0) {
+            $str[] = $left;
+            $str[] = $dispense_unit;
+        }
+        if ($right > 0) {
+            $str[] = $right;
+            $str[] = $basic_unit;
+        }
+        return implode('', $str);
+    }
+
+    /**
      * 转成处方类别
      * @param $code
      * @return bool

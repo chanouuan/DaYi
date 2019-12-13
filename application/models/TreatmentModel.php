@@ -11,22 +11,6 @@ class TreatmentModel extends Crud {
     protected $table = 'dayi_treatment_sheet';
 
     /**
-     * 验证诊疗项目
-     * @return bool
-     */
-    public function diffTreatment (array $id)
-    {
-        if (empty($id)) {
-            return false;
-        }
-        $list = $this->select(['id' => ['in', $id], 'status' => CommonStatus::OK], 'id,name,unit,price');
-        if (count($list) != count($id)) {
-            return false;
-        }
-        return array_column($list, null, 'id');
-    }
-
-    /**
      * 添加诊疗项目
      * @return array
      */

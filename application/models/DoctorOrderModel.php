@@ -79,7 +79,6 @@ class DoctorOrderModel extends Crud {
         $orderInfo['charge_user_name'] = $adminInfo['nickname'];
 
         $orderInfo['patient_name'] = $orderInfo['patient_name'] ? $orderInfo['patient_name'] : '无';
-        $orderInfo['patient_gender'] = Gender::getMessage($orderInfo['patient_gender']);
         $orderInfo['create_time'] = substr($orderInfo['create_time'], 0, 10);
         $orderInfo['payway'] = implode(',', array_column($orderInfo['payway'], 'payway'));
 
@@ -130,7 +129,7 @@ class DoctorOrderModel extends Crud {
         if (!$orderId = $this->getDb()->transaction(function ($db) use ($post) {
             // 新增订单
             if (!$orderId = $db->insert([
-                'clinic_id'      => $this->userInfo['clinic_id'],
+                'clinic_id'      => $post['clinic_id'],
                 'enum_source'    => OrderSource::BUY_DRUG,
                 'patient_id'     => $post['patient_id'],
                 'patient_name'   => $post['patient_name'],
@@ -145,7 +144,7 @@ class DoctorOrderModel extends Crud {
             }
             // 新增处方笺
             foreach ($post['notes'] as $k => $v) {
-                $post['notes'][$k]['clinic_id'] = $this->userInfo['clinic_id'];
+                $post['notes'][$k]['clinic_id'] = $post['clinic_id'];
                 $post['notes'][$k]['order_id']  = $orderId;
             }
             if (!$db->partition($this->partition)->table('dayi_order_notes')->insert($post['notes'])) {
@@ -184,7 +183,7 @@ class DoctorOrderModel extends Crud {
         }
 
         // 获取收费项目
-        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::PAY])->field('id,category,relation_id,total_amount,dose,unit_price,back_amount')->select()) {
+        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id'], 'status' => NoteStatus::PAY])->field('id,category,relation_id,total_amount,unit_price,back_amount,is_scatter,basic_amount')->select()) {
             return error('收费项目不存在');
         }
 
@@ -202,7 +201,6 @@ class DoctorOrderModel extends Crud {
                     $have = true;
                     // 验证退费数量
                     if ($vv['back_amount'] <= 0 || $vv['back_amount'] > ($v['total_amount'] - $v['back_amount'])) {
-                        $orderStatus = OrderStatus::PART_REFUND;
                         $notes[$k]['total_amount'] = $v['total_amount'] - $v['back_amount'];
                         break;
                     }
@@ -334,7 +332,7 @@ class DoctorOrderModel extends Crud {
         }
 
         // 获取处方笺
-        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id']])->field('id,category,relation_id,total_amount,dose')->select()) {
+        if (!$notes = $this->getDb()->table('dayi_order_notes')->where(['clinic_id' => $this->userInfo['clinic_id'], 'order_id' => $post['order_id']])->field('id,category,relation_id,total_amount,is_scatter,basic_amount')->select()) {
             return error('处方不存在');
         }
         $notes = $this->totalAmount($notes);
@@ -408,16 +406,19 @@ class DoctorOrderModel extends Crud {
             return error('订单不存在');
         }
 
-        $orderInfo['pay']      = round_dollar($orderInfo['pay']);
+        $orderInfo['age_month'] = $orderInfo['patient_age'];
+        $orderInfo['patient_age'] = Gender::showAge($orderInfo['patient_age']);
+        $orderInfo['patient_gender'] = Gender::getMessage($orderInfo['patient_gender']);
+        $orderInfo['pay'] = round_dollar($orderInfo['pay']);
         $orderInfo['discount'] = round_dollar($orderInfo['discount']);
-        $orderInfo['refund']   = round_dollar($orderInfo['refund']);
+        $orderInfo['refund'] = round_dollar($orderInfo['refund']);
 
         // 录音保存时间
         if ($orderInfo['voice']) {
             $orderInfo['voice_save'] = VipLevel::checkVoiceSaveTime($this->userInfo['clinic_id'], $orderInfo['create_time']);
             $orderInfo['is_up'] = VipLevel::isDownloadVoiceByUp($this->userInfo['clinic_id'], $orderInfo['create_time']);
             if ($orderInfo['voice_save'] <= 0) {
-                $orderInfo['voice'] = 'empty';
+                $orderInfo['voice'] = 'null';
             }
         }
 
@@ -440,7 +441,7 @@ class DoctorOrderModel extends Crud {
         // 获取处方笺
         $orderInfo['notes'] = [];
         if ($orderInfo['pay']) {
-            $orderInfo['notes'] = $this->getDb()->table('dayi_order_notes')->where(['order_id' => $order_id])->field('id,category,relation_id,name,package_spec,dispense_unit,dosage_unit,single_amount,total_amount,usages,frequency,drug_days,dose,remark,unit_price,back_amount')->order('id')->select();
+            $orderInfo['notes'] = $this->getDb()->table('dayi_order_notes')->where(['order_id' => $order_id])->field('id,category,relation_id,name,package_spec,unit,single_amount,total_amount,usages,frequency,drug_days,remark,unit_price,back_amount,is_scatter')->order('id')->select();
             foreach ($orderInfo['notes'] as $k => $v) {
                 $orderInfo['notes'][$k]['unit_price'] = round_dollar($v['unit_price']);
                 if (NoteUsage::format($v['usages'])) {
@@ -518,7 +519,7 @@ class DoctorOrderModel extends Crud {
             $condition['patient_name'] = ['like', '%' . $post['patient_name'] . '%'];
         }
 
-        // 搜索凭条号
+        // 搜索会诊号
         if ($post['print_code']) {
             $condition['print_code'] = $post['print_code'];
         }
@@ -642,14 +643,10 @@ class DoctorOrderModel extends Crud {
             return error('订单不存在');
         }
 
-        // 获取处方笺
-        if (false === ($notes = $this->getDb()->table('dayi_order_notes')->where(['order_id' => $post['order_id']])->field('id')->select())) {
-            return error('数据异常，请重新操作');
-        }
-
-        if (!$this->getDb()->transaction(function ($db) use ($post, $notes) {
+        if (!$this->getDb()->transaction(function ($db) use ($post) {
             // 编辑会诊单
             if (!$db->where(['id' => $post['order_id'], 'status' => OrderStatus::NOPAY])->update([
+                'doctor_id'         => $post['doctor_id'],
                 'patient_id'        => $post['patient_id'],
                 'patient_name'      => $post['patient_name'],
                 'patient_tel'       => $post['patient_tel'],
@@ -666,10 +663,8 @@ class DoctorOrderModel extends Crud {
                 return false;
             }
             // 删除之前处方笺
-            if ($notes) {
-                if (!$db->partition($this->partition)->table('dayi_order_notes')->where(['id' => ['in', array_column($notes, 'id')]])->delete()) {
-                    return false;
-                }
+            if (false === $db->partition($this->partition)->table('dayi_order_notes')->where(['clinic_id' => $post['clinic_id'], 'order_id' => $post['order_id']])->delete()) {
+                return false;
             }
             // 新增处方笺
             foreach ($post['notes'] as $k => $v) {
@@ -760,8 +755,7 @@ class DoctorOrderModel extends Crud {
         $post['doctor_id']         = intval($post['doctor_id']);
         $post['patient_name']      = trim_space($post['patient_name'], 0, 20);
         $post['patient_gender']    = Gender::format($post['patient_gender']);
-        $post['patient_gender']    = $post['patient_gender'] ? $post['patient_gender'] : null;
-        $post['patient_age']       = Gender::validationAge($post['patient_age']);
+        $post['patient_age']       = $post['patient_age'] ? region_number($post['patient_age'], 0, 0, 1440, 1440) : null;
         $post['patient_tel']       = trim_space($post['patient_tel'], 0, 11);
         $post['patient_complaint'] = trim_space($post['patient_complaint'], 0, 200);
         $post['patient_allergies'] = trim_space($post['patient_allergies'], 0, 200);
@@ -769,8 +763,12 @@ class DoctorOrderModel extends Crud {
         $post['note_dose']         = max(0, intval($post['note_dose']));
         $post['note_side']         = NoteSide::format($post['note_side']);
         $post['advice']            = trim_space($post['advice'], 0, 200);
-        $post['voice']             = ishttp($post['voice']) ? $post['voice'] : null;
-        $post['notes']             = $post['notes'] ? array_slice(json_decode(htmlspecialchars_decode($post['notes']), true), 0, 30) : [];
+        $post['notes']             = $post['notes'] ? array_slice(json_decode(htmlspecialchars_decode($post['notes']), true), 0, 100) : [];
+
+        if (!$post['patient_name'] && !$post['patient_tel']) {
+            $post['patient_gender'] = null;
+            $post['patient_age']    = null;
+        }
 
         if ($post['patient_tel'] && !validate_telephone($post['patient_tel'])) {
             return error('患者手机号填写不正确');
@@ -848,9 +846,6 @@ class DoctorOrderModel extends Crud {
         $total = 0;
         foreach ($notes as $k => $v) {
             $price = $v['unit_price'] * $v['total_amount']; // 单价 * 总量
-            if ($v['category'] == NoteCategory::CHINESE) {
-                $price *= $v['dose']; // 草药剂量
-            }
             $total += $price;
         }
         return $total;
@@ -870,9 +865,9 @@ class DoctorOrderModel extends Crud {
                 if (!isset($list[$v['relation_id']])) {
                     $list[$v['relation_id']] = [];
                 }
-                if ($v['category'] == NoteCategory::CHINESE) {
-                    // 草药剂量
-                    $list[$v['relation_id']]['amount'] += ($v['total_amount'] * $v['dose']);
+                if ($v['category'] == NoteCategory::WESTERN && $v['is_scatter'] == 0) {
+                    // 换算成拆零数量
+                    $list[$v['relation_id']]['amount'] += $v['total_amount'] * $v['basic_amount'];
                 } else {
                     $list[$v['relation_id']]['amount'] += $v['total_amount'];
                 }
@@ -893,53 +888,59 @@ class DoctorOrderModel extends Crud {
         foreach ($notes as $k => $v) {
             $notes[$k]['relation_id']   = intval($v['relation_id']);
             $notes[$k]['total_amount']  = max(0, intval($v['total_amount']));
-            $notes[$k]['single_amount'] = max(0, intval($v['single_amount']));
+            $notes[$k]['single_amount'] = max(0, round(floatval($v['single_amount']), 6));
             $notes[$k]['usages']        = NoteUsage::format($v['usages']);
             $notes[$k]['frequency']     = NoteFrequency::format($v['frequency']);
             $notes[$k]['drug_days']     = max(0, intval($v['drug_days']));
+            $notes[$k]['remark']        = trim_space($v['remark'], 0, 80);
+            $notes[$k]['is_scatter']    = $v['is_scatter'] ? 1 : 0; // 是否拆零
             if (!$notes[$k]['relation_id'] || !$notes[$k]['total_amount'] || !NoteCategory::format($v['category'])) {
                 return false;
             }
         }
 
-        $list = [];
-        $lookChineseDrug = false;
-        foreach ($notes as $k => $v) {
-            if (NoteCategory::isDrug($v['category'])) {
-                // 药品
-                if (!isset($list[1][$v['relation_id']])) {
-                    $list[1][$v['relation_id']] = [];
-                }
-                if ($v['category'] == NoteCategory::CHINESE) {
-                    // 草药剂量
-                    $lookChineseDrug = true;
-                    $dose = region_number($dose, 1, 1, 1000, 1000);
-                    $list[1][$v['relation_id']]['amount'] += ($v['total_amount'] * $dose);
-                } else {
-                    $list[1][$v['relation_id']]['amount'] += $v['total_amount'];
-                }
-            } else {
-                // 诊疗
-                $list[2][$v['relation_id']] = $v['relation_id'];
-            }
-        }
-        if (!$lookChineseDrug) {
-            $dose = 0;
-        }
-
         $drugModel      = new DrugModel(null, $clinic_id);
         $treatmentModel = new TreatmentModel();
 
+        $drugIds  = [];
+        $sheetIds = [];
+        foreach ($notes as $k => $v) {
+            if (NoteCategory::isDrug($v['category'])) {
+                $drugIds[$v['relation_id']] = $v['relation_id'];
+            } else {
+                $sheetIds[$v['relation_id']] = $v['relation_id'];
+            }
+        }
+
         // 获取药品
-        if (isset($list[1])) {
-            if (!$list[1] = $drugModel->validationAmount($clinic_id, $list[1])) {
+        if ($drugIds) {
+            $drugs = $drugModel->select(['id' => ['in', $drugIds], 'status' => 1], 'id,drug_type,name,package_spec,dispense_unit,basic_unit,dosage_unit,retail_price,basic_price,basic_amount,amount');
+            $drugs = array_column($drugs, null, 'id');
+            if (count($drugs) !== count($drugIds)) {
+                return false;
+            }
+            $drugIds = [];
+            foreach ($notes as $k => $v) {
+                if (NoteCategory::isDrug($v['category'])) {
+                    if ($v['category'] == NoteCategory::WESTERN && $v['is_scatter'] == 0) {
+                        // 换算成拆零数量
+                        $drugIds[$v['relation_id']]['amount'] += $v['total_amount'] * $drugs[$v['relation_id']]['basic_amount'];
+                    } else {
+                        $drugIds[$v['relation_id']]['amount'] += $v['total_amount'];
+                    }
+                }
+            }
+            // 库存效验
+            if (!$drugModel->validationAmount($clinic_id, $drugIds, true, false)) {
                 return false;
             }
         }
 
-        // 获取诊疗
-        if (isset($list[2])) {
-            if (!$list[2] = $treatmentModel->diffTreatment($list[2])) {
+        // 获取诊疗项目
+        if ($sheetIds) {
+            $sheets = $treatmentModel->select(['id' => ['in', $sheetIds], 'status' => 1], 'id,name,unit,price');
+            $sheets = array_column($sheets, null, 'id');
+            if (count($sheetIds) !== count($sheets)) {
                 return false;
             }
         }
@@ -949,43 +950,43 @@ class DoctorOrderModel extends Crud {
             if (NoteCategory::isDrug($v['category'])) {
                 // 药品
                 $result[] = [
-                    'category'      => $v['category'],
-                    'relation_id'   => $v['relation_id'],
-                    'name'          => $list[1][$v['relation_id']]['name'],
-                    'package_spec'  => $list[1][$v['relation_id']]['package_spec'],
-                    'dispense_unit' => $list[1][$v['relation_id']]['dispense_unit'],
-                    'dosage_unit'   => $list[1][$v['relation_id']]['dosage_unit'],
-                    'single_amount' => $v['single_amount'],
-                    'total_amount'  => $v['total_amount'],
-                    'usages'        => $v['usages'],
-                    'frequency'     => $v['frequency'],
-                    'drug_days'     => $v['drug_days'],
-                    'unit_price'    => $list[1][$v['relation_id']]['retail_price'],
-                    'remark'        => null,
-                    'dose'          => $dose
+                    'category'       => $v['category'],
+                    'relation_id'    => $v['relation_id'],
+                    'name'           => $drugs[$v['relation_id']]['name'],
+                    'package_spec'   => $drugs[$v['relation_id']]['package_spec'],
+                    'unit'           => $v['is_scatter'] ? $drugs[$v['relation_id']]['basic_unit'] : $drugs[$v['relation_id']]['dispense_unit'],
+                    'single_amount'  => $v['single_amount'] ? ($v['single_amount'] . $drugs[$v['relation_id']]['dosage_unit']) : null,
+                    'total_amount'   => $v['total_amount'],
+                    'usages'         => $v['usages'],
+                    'frequency'      => $v['frequency'],
+                    'drug_days'      => $v['drug_days'],
+                    'unit_price'     => $v['is_scatter'] ? $drugs[$v['relation_id']]['basic_price'] : $drugs[$v['relation_id']]['retail_price'],
+                    'basic_amount'   => $drugs[$v['relation_id']]['basic_amount'],
+                    'is_scatter'     => $v['is_scatter'],
+                    'remark'         => null
                 ];
             } else {
                 // 诊疗
                 $result[] = [
-                    'category'      => $v['category'],
-                    'relation_id'   => $v['relation_id'],
-                    'name'          => $list[2][$v['relation_id']]['name'],
-                    'package_spec'  => null,
-                    'dispense_unit' => $list[2][$v['relation_id']]['unit'],
-                    'dosage_unit'   => null,
-                    'single_amount' => null,
-                    'total_amount'  => $v['total_amount'],
-                    'usages'        => null,
-                    'frequency'     => null,
-                    'drug_days'     => null,
-                    'unit_price'    => $list[2][$v['relation_id']]['price'],
-                    'remark'        => $v['remark'],
-                    'dose'          => $dose
+                    'category'       => $v['category'],
+                    'relation_id'    => $v['relation_id'],
+                    'name'           => $sheets[$v['relation_id']]['name'],
+                    'package_spec'   => null,
+                    'unit'           => $sheets[$v['relation_id']]['unit'],
+                    'single_amount'  => null,
+                    'total_amount'   => $v['total_amount'],
+                    'usages'         => null,
+                    'frequency'      => null,
+                    'drug_days'      => null,
+                    'unit_price'     => $sheets[$v['relation_id']]['price'],
+                    'basic_amount'   => null,
+                    'is_scatter'     => null,
+                    'remark'         => $v['remark']
                 ];
             }
         }
 
-        unset($drugModel, $treatmentModel, $notes, $list);
+        unset($drugModel, $treatmentModel, $drugs, $sheets);
         return $result;
     }
 

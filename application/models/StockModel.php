@@ -145,7 +145,7 @@ class StockModel extends Crud {
         // 获取药品详情
         $stockInfo['details'] = $this->getDb()
             ->table('dayi_stock_detail')
-            ->field('id,drug_type,name,package_spec,dispense_unit,retail_price,manufactor_name,amount,purchase_price,batch_number,valid_time')
+            ->field('id,drug_type,name,package_spec,dispense_unit,basic_amount,basic_unit,retail_price,manufactor_name,amount,purchase_price,batch_number,valid_time')
             ->where(['stock_id' => $stockInfo['id']])
             ->order('id')
             ->select();
@@ -153,6 +153,7 @@ class StockModel extends Crud {
             $stockInfo['details'][$k]['drug_type']      = DrugType::getMessage($v['drug_type']);
             $stockInfo['details'][$k]['retail_price']   = round_dollar($v['retail_price']);
             $stockInfo['details'][$k]['purchase_price'] = round_dollar($v['purchase_price']);
+            $stockInfo['details'][$k]['amount_unit']    = DrugType::showAmount($v['drug_type'], $v['amount'], $v['basic_amount'], $v['dispense_unit'], $v['basic_unit']);
         }
 
         return success($stockInfo);
@@ -188,18 +189,17 @@ class StockModel extends Crud {
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             $list = $this->getDb()
-                ->field('detail.id,detail.amount,detail.dispense_unit,detail.retail_price,detail.purchase_price,detail.batch_number,detail.valid_time,stock.stock_way,stock.stock_date,stock.supplier')
+                ->field('detail.id,detail.drug_type,detail.dispense_unit,detail.basic_unit,detail.basic_amount,detail.amount,detail.retail_price,detail.purchase_price,detail.batch_number,detail.valid_time,stock.stock_way,stock.stock_date,stock.supplier')
                 ->table('dayi_stock_detail__partition__ detail left join dayi_stock__partition__ stock on stock.id = detail.stock_id')
                 ->where($condition)
                 ->order('detail.id desc')
                 ->limit($pagesize['limitstr'])
                 ->select();
-            if ($list) {
-                foreach ($list as $k => $v) {
-                    $list[$k]['retail_price']   = round_dollar($v['retail_price']);
-                    $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
-                    $list[$k]['stock_way']      = StockWay::getMessage($v['stock_way']);
-                }
+            foreach ($list as $k => $v) {
+                $list[$k]['retail_price']   = round_dollar($v['retail_price']);
+                $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
+                $list[$k]['stock_way']      = StockWay::getMessage($v['stock_way']);
+                $list[$k]['amount_unit']    = DrugType::showAmount($v['drug_type'], $v['amount'], $v['basic_amount'], $v['dispense_unit'], $v['basic_unit']);
             }
         }
 
@@ -221,27 +221,27 @@ class StockModel extends Crud {
 
         $condition = [
             'clinic_id' => $this->userInfo['clinic_id'],
-            'drug_id'   => $post['drug_id'],
-            'amount'    => ['>0']
+            'drug_id'   => $post['drug_id']
         ];
 
         $count = $this->getDb()
             ->table('dayi_stock_detail')
+            ->field('count(DISTINCT batch_number)')
             ->where($condition)
             ->count();
         if ($count > 0) {
             $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             $list = $this->getDb()
                 ->table('dayi_stock_detail')
-                ->field('id,name,package_spec,manufactor_name,dispense_unit,amount,purchase_price,batch_number,valid_time')
+                ->field('id,name,package_spec,manufactor_name,drug_type,dispense_unit,basic_amount,basic_unit,sum(amount) as amount,purchase_price,batch_number,valid_time')
                 ->where($condition)
+                ->group('batch_number')
                 ->order('id desc')
                 ->limit($pagesize['limitstr'])
                 ->select();
-            if ($list) {
-                foreach ($list as $k => $v) {
-                    $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
-                }
+            foreach ($list as $k => $v) {
+                $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
+                $list[$k]['amount_unit']    = DrugType::showAmount($v['drug_type'], $v['amount'], $v['basic_amount'], $v['dispense_unit'], $v['basic_unit']);
             }
         }
 
@@ -269,7 +269,8 @@ class StockModel extends Crud {
         }
 
         foreach ($list as $k => $v) {
-            $list[$k]['amount_unit']    = $v['amount'] . $v['dispense_unit'];
+            $list[$k]['amount']         = DrugType::convertStockAmount($v['drug_type'], $v['amount'], $v['basic_amount']);
+            $list[$k]['amount_unit']    = DrugType::showAmount($v['drug_type'], $v['amount'], $v['basic_amount'], $v['dispense_unit'], $v['basic_unit']);
             $list[$k]['retail_price']   = round_dollar($v['retail_price']);
             $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
         }
@@ -398,6 +399,10 @@ class StockModel extends Crud {
             return true;
         }
 
+        if (empty($data)) {
+            return true;
+        }
+
         // 获取诊所
         if (!$clinicInfo = GenerateCache::getClinic($clinic_id)) {
             return false;
@@ -410,7 +415,7 @@ class StockModel extends Crud {
         // 获取已发药
         if (!$batches = $this->getDb()
                 ->table('dayi_stock_detail')
-                ->field('clinic_id,drug_id,batch_number,amount,name,drug_type,package_spec,dispense_unit,retail_price,purchase_price,manufactor_name,valid_time')
+                ->field('clinic_id,drug_id,batch_number,amount,name,drug_type,package_spec,dispense_unit,basic_amount,basic_unit,retail_price,purchase_price,manufactor_name,valid_time')
                 ->where(['clinic_id' => $clinic_id, 'stock_id' => $stock_id, 'drug_id' => ['in', array_keys($data)]])
                 ->order('id')
                 ->select()) {
@@ -587,7 +592,7 @@ class StockModel extends Crud {
      */
     protected function getBatchDetail (array $condition, $field = null)
     {
-        $field = $field ? $field : 'clinic_id,drug_id,batch_number,sum(amount) as amount,name,drug_type,package_spec,dispense_unit,retail_price,purchase_price,manufactor_name,valid_time';
+        $field = $field ? $field : 'clinic_id,drug_id,batch_number,sum(amount) as amount,name,drug_type,dispense_unit,basic_amount,basic_unit,package_spec,retail_price,purchase_price,manufactor_name,valid_time';
         return $this->getDb()
                 ->table('dayi_stock_detail')
                 ->field($field)
@@ -647,7 +652,7 @@ class StockModel extends Crud {
             $details[$k]['drug_id']         = intval($v['drug_id']);
             $details[$k]['amount']          = max(0, intval($v['amount']));
             $details[$k]['amount']          = $stock_type == StockType::PUSH ? 0 - $details[$k]['amount'] : $details[$k]['amount'];
-            $details[$k]['purchase_price']  = $stock_type == StockType::PUSH ? null : max(0, intval(floatval($v['purchase_price']) * 100));
+            $details[$k]['purchase_price']  = max(0, intval(floatval($v['purchase_price']) * 100));
             $details[$k]['batch_number']    = trim_space($v['batch_number'], 0, 20, '');
             $details[$k]['valid_time']      = strtotime($v['valid_time']);
             $details[$k]['valid_time']      = $details[$k]['valid_time'] ? date('Y-m-d', $details[$k]['valid_time']) : null;
@@ -662,23 +667,37 @@ class StockModel extends Crud {
         foreach ($list as $k => $v) {
             $validations[$v]['clinic_id'] = $clinic_id;
         }
+
+        // 获取药品
+        if (!$list = (new DrugModel(null, $clinic_id))->validationAmount(null, $validations, true, true)) {
+            return false;
+        }
+
+        // 西药出入库只支持库存单位，所以这里要换算成拆零单位，因为数据库记录的是拆零数量
+        foreach ($details as $k => $v) {
+            if (!isset($list[$v['drug_id']])) {
+                return false;
+            }
+            if (DrugType::isWestNeutralDrug($list[$v['drug_id']]['drug_type'])) {
+                $details[$k]['amount'] = $v['amount'] * $list[$v['drug_id']]['basic_amount'];
+            }
+        }
         
         if ($stock_type == StockType::PUSH) {
             // 出库
-            if (!$res = $this->getBatchDetail(['clinic_id' => $clinic_id, 'drug_id' => ['in', $list], 'batch_number' => ['in', array_unique(array_column($details, 'batch_number'))]], 'drug_id,sum(amount) as amount,batch_number')) {
+            if (!$set = $this->getBatchDetail(['clinic_id' => $clinic_id, 'drug_id' => ['in', array_unique(array_column($details, 'drug_id'))], 'batch_number' => ['in', array_unique(array_column($details, 'batch_number'))]], 'drug_id,sum(amount) as amount,batch_number')) {
                 return false;
             }
             // 检查库存
             $batches = [];
-            foreach ($res as $k => $v) {
+            foreach ($set as $k => $v) {
                 $batches[$v['drug_id'] . '_' . $v['batch_number']] = $v['amount'];
             }
-            unset($res);
-            $list = [];
+            $set = [];
             foreach ($details as $k => $v) {
-                $list[$v['drug_id'] . '_' . $v['batch_number']] += abs($v['amount']);
+                $set[$v['drug_id'] . '_' . $v['batch_number']] += abs($v['amount']);
             }
-            foreach ($list as $k => $v) {
+            foreach ($set as $k => $v) {
                 if (!isset($batches[$k])) {
                     return false;
                 }
@@ -686,11 +705,7 @@ class StockModel extends Crud {
                     return false; // 库存不足
                 }
             }
-        }
-
-        // 获取药品
-        if (!$list = (new DrugModel(null, $clinic_id))->validationAmount(null, $validations, true, true)) {
-            return false;
+            unset($set, $batches);
         }
 
         $result = [];
@@ -703,6 +718,8 @@ class StockModel extends Crud {
                 'package_spec'    => $list[$v['drug_id']]['package_spec'],
                 'dispense_unit'   => $list[$v['drug_id']]['dispense_unit'],
                 'retail_price'    => $list[$v['drug_id']]['retail_price'],
+                'basic_amount'    => $list[$v['drug_id']]['basic_amount'],
+                'basic_unit'      => $list[$v['drug_id']]['basic_unit'],
                 'manufactor_name' => $v['manufactor_name'],
                 'amount'          => $v['amount'],
                 'purchase_price'  => $v['purchase_price'],
@@ -725,8 +742,12 @@ class StockModel extends Crud {
         $total = 0;
         foreach ($details as $k => $v) {
             if ($v['amount'] > 0) {
-                $total += $v['purchase_price'] * $v['amount'];
-            }  
+                if (DrugType::isWestNeutralDrug($v['drug_type'])) {
+                    $total += $v['purchase_price'] * ($v['amount'] / $v['basic_amount']);
+                } else {
+                    $total += $v['purchase_price'] * $v['amount'];
+                }
+            }
         }
         return $total > 0 ? $total :null;
     }

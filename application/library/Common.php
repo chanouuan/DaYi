@@ -45,57 +45,6 @@ function concat (...$args)
     return '';
 }
 
-function import_library($path)
-{
-    $path = trim($path, DIRECTORY_SEPARATOR) . '.php';
-    require_once implode(DIRECTORY_SEPARATOR, [
-        APPLICATION_PATH, 'application', DIRECTORY_SEPARATOR, 'library', $path
-    ]);
-}
-
-function showWeekDate($datetime)
-{
-    $datetime = strtotime($datetime);
-    if(!$datetime) return '';
-    $week = array(
-            '1'=>'周一',
-            '2'=>'周二',
-            '3'=>'周三',
-            '4'=>'周四',
-            '5'=>'周五',
-            '6'=>'周六',
-            '7'=>'周日'
-    );
-    $today = date('Y年m月d日 N', $datetime);
-    $today = substr($today, 0, -1).'('.$week[substr($today, -1)].')';
-    return $today.' '.date('H:i', $datetime);
-}
-
-function getRefundMoney ($ordertime)
-{
-    $ordertime = strtotime($ordertime);
-    if (!$ordertime) return false;
-    $difftime = $ordertime - time();
-    $refund_rule = json_decode(getConfig()['refund_rule'], true);
-    if (!$refund_rule) return false;
-    foreach ($refund_rule as $k => $v) {
-        if (isset($v['min'])) {
-            $min = $v['min'] * 3600;
-            if ($difftime < $min) {
-                continue;
-            }
-        }
-        if (isset($v['max'])) {
-            $max = $v['max'] * 3600;
-            if ($difftime > $max) {
-                continue;
-            }
-        }
-        return $v['refund'];
-    }
-    return false;
-}
-
 function byte_convert ($byte)
 {
     if ($byte < 1024) {
@@ -457,11 +406,6 @@ function dy_authcode ($string, $operation = 'DECODE', $key = '', $expiry = 0)
     }
 }
 
-function safe_subject ($txt)
-{
-    return !empty($txt) ? addslashes($txt) : $txt;
-}
-
 function F ($name, $value = '')
 {
     static $_cache = array();
@@ -679,7 +623,7 @@ function getgpc ($k, $type = 'GP')
 function safepost (&$data)
 {
     if (!empty($data)) {
-        array_walk($data, function  (&$v) {
+        array_walk($data, function (&$v) {
             if (is_array($v)) {
                 safepost($v);
             } else {

@@ -21,12 +21,9 @@ class PatientModel extends Crud {
             return [];
         }
         foreach ($list as $k => $v) {
-            // 年龄
-            list($list[$k]['age_year'], $list[$k]['age_month']) = array_values(Gender::getAgeByBirthDay($v['birthday']));
-            $list[$k]['age'] = Gender::showAge($list[$k]['age_year'] + $list[$k]['age_month'] / 100);
-            // 性别
-            $list[$k]['sex'] = Gender::getMessage($v['gender']);
-            unset($list[$k]['birthday']);
+            $list[$k]['birthday'] = Gender::getAgeByBirthDay($v['birthday']);
+            $list[$k]['age']      = Gender::showAge($list[$k]['birthday']);
+            $list[$k]['sex']      = Gender::getMessage($v['gender']);
         }
         return $list;
     }

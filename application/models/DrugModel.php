@@ -55,7 +55,7 @@ class DrugModel extends Crud {
             $v['id'] = $k;
             $v['status'] = CommonStatus::OK;
             if ($collect) {
-                if (!$list[$k] = $this->find($v, 'drug_type,name,package_spec,dispense_unit,dosage_unit,retail_price')) {
+                if (!$list[$k] = $this->find($v, 'drug_type,name,package_spec,dispense_unit,basic_unit,dosage_unit,retail_price,basic_price,basic_amount')) {
                     return false;
                 }
             } else {
@@ -135,6 +135,7 @@ class DrugModel extends Crud {
         $data['standard_code']   = trim_space($post['standard_code'], 0, 30);
         $data['drug_code']       = trim_space($post['drug_code'], 0, 32);
         $data['retail_price']    = $post['retail_price'] ? max(0, intval(floatval($post['retail_price']) * 100)) : null;
+        $data['basic_price']     = $post['basic_price'] ? max(0, intval(floatval($post['basic_price']) * 100)) : null;
         $data['is_antibiotic']   = DrugType::isWestNeutralDrug($data['drug_type']) ? ($post['is_antibiotic'] ? 1 : 0) : null;
         $data['usages']          = NoteUsage::format($post['usages']);
         $data['frequency']       = NoteFrequency::format($post['frequency']);
@@ -226,12 +227,14 @@ class DrugModel extends Crud {
         if ($post['is_procure']) {
             $condition['is_procure'] = 1;
         }
-        $field = $field ? $field : 'id,drug_type,name,package_spec,dispense_unit,dosage_unit,dosage_amount,retail_price as price,amount,manufactor_name,usages,frequency';
+        $field = $field ? $field : 'id,drug_type,name,package_spec,dispense_unit,basic_unit,basic_amount,dosage_unit,dosage_amount,retail_price as price,basic_price,amount,manufactor_name,usages,frequency';
         if (!$list = $this->select($condition, $field, null, $limit)) {
             return [];
         }
         foreach ($list as $k => $v) {
-            $list[$k]['price'] = round_dollar($v['price']);
+            $list[$k]['price']       = round_dollar($v['price']);
+            $list[$k]['basic_price'] = round_dollar($v['basic_price']);
+            $list[$k]['amount_unit'] = DrugType::showAmount($v['drug_type'], $v['amount'], $v['basic_amount'], $v['dispense_unit'], $v['basic_unit']);
         }
         return $list;
     }
@@ -243,11 +246,12 @@ class DrugModel extends Crud {
     public function getDrugInfo ($id)
     {
         $id = intval($id);
-        if (!$info = $this->find(['id' => $id], 'id,drug_type,approval_num,name,package_spec,manufactor_name,dispense_unit,basic_amount,basic_unit,dosage_unit,dosage_amount,py_code,wb_code,dosage_type,barcode,goods_name,standard_code,drug_code,retail_price,is_antibiotic,usages,frequency,status')) {
+        if (!$info = $this->find(['id' => $id], 'id,drug_type,approval_num,name,package_spec,manufactor_name,dispense_unit,basic_amount,basic_unit,dosage_unit,dosage_amount,py_code,wb_code,dosage_type,barcode,goods_name,standard_code,drug_code,retail_price,basic_price,is_antibiotic,usages,frequency,status')) {
             return [];
         }
         $info['drug_type']    = strval($info['drug_type']);
         $info['retail_price'] = round_dollar($info['retail_price']);
+        $info['basic_price']  = round_dollar($info['basic_price']);
         return $info;
     }
 
@@ -284,11 +288,12 @@ class DrugModel extends Crud {
             if (!$post['export']) {
                 $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             }
-            $list = $this->select($condition, 'id,drug_type,name,package_spec,dispense_unit,purchase_price,retail_price,amount,manufactor_name,status', 'id desc', $pagesize['limitstr']);
+            $list = $this->select($condition, 'id,drug_type,name,package_spec,dispense_unit,basic_unit,basic_amount,purchase_price,retail_price,amount,manufactor_name,status', 'id desc', $pagesize['limitstr']);
             foreach ($list as $k => $v) {
                 $list[$k]['purchase_price'] = round_dollar($v['purchase_price']);
                 $list[$k]['retail_price']   = round_dollar($v['retail_price']);
                 $list[$k]['type_name']      = DrugType::getMessage($v['drug_type']);
+                $list[$k]['amount_unit']    = DrugType::showAmount($v['drug_type'], $v['amount'], $v['basic_amount'], $v['dispense_unit'], $v['basic_unit']);
             }
         }
 
@@ -304,7 +309,7 @@ class DrugModel extends Crud {
                     $v['manufactor_name'], 
                     $v['retail_price'], 
                     $v['purchase_price'], 
-                    $v['amount'] . $v['dispense_unit']
+                    $v['amount_unit']
                 ];
             }
             $this->exportCsv('库存列表', '编号,名称,类型,规格,厂家,零售价,进货价,库存', $input);

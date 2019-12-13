@@ -407,7 +407,7 @@ class ServerClinicModel extends Crud {
                 ['key' => 'package_spec', 'value' => '规格'],
                 ['key' => 'price', 'value' => '零售价'],
                 ['key' => 'dispense_unit', 'value' => '单位'],
-                ['key' => 'amount', 'value' => '库存'],
+                ['key' => 'amount_unit', 'value' => '库存'],
                 ['key' => 'manufactor_name', 'value' => '生产商']
             ],
             'rows' => $list
