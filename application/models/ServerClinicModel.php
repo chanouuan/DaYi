@@ -197,6 +197,15 @@ class ServerClinicModel extends Crud {
     }
 
     /**
+     * 获取安装地址
+     * @return array
+     */
+    public function getInstallAddr ()
+    {
+        return (new VersionModel())->getInstallAddr();
+    }
+
+    /**
      * 获取医生列表
      * @return array
      */

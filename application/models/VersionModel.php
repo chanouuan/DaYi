@@ -8,6 +8,22 @@ class VersionModel extends Crud {
 
     protected $table = 'pro_version';
 
+    /**
+	 * 获取安装地址
+	 * @result array
+	 */
+	public function getInstallAddr () 
+    {
+		if (!$libaray = $this->select(['status' => 1, 'install_addr' => ['is not null']], 'os,version,install_addr', 'install_mode asc, id asc')) {
+			return error('获取安装包失败');
+		}
+
+		// 获取最新安装包
+		$libaray = array_column($libaray, null, 'os');
+
+		return success($libaray);
+	}
+
 	/**
 	 * 版本号检查
 	 * @param $os 系统平台

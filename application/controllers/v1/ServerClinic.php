@@ -739,6 +739,20 @@ class ServerClinic extends ActionPDO {
     }
 
     /**
+     * 获取安装地址
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function getInstallAddr ()
+    {
+        return (new ServerClinicModel())->getInstallAddr();
+    }
+
+    /**
      * 打印模板
      * @login
      * @param *order_id 订单ID
