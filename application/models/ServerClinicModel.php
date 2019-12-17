@@ -494,6 +494,9 @@ class ServerClinicModel extends Crud {
         
         $userInfo['clinic_info'] = array_key_clean($clinicInfo, ['db_instance', 'db_chunk']);
 
+        // 是否已添加药品，前端会提示用户进入添加药品页
+        $userInfo['have_drug'] = (new DrugModel(null, $userInfo['clinic_id']))->count(['clinic_id' => $userInfo['clinic_id']]) ? 1 : 0;
+
         // 消息
         $userInfo['unread_count'] = 0; // 未读消息数
 

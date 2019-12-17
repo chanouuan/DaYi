@@ -3,9 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=0">
-    <title>凭条</title>
+    <title>会诊号</title>
+    <style>
+    *{padding:0;margin:0;}
+    body{font-size:14px;line-height:1.2;color:#000;font-weight:700;font-family:"Microsoft YaHei","黑体";}
+    .main{
+      width: 180px;
+      background: #fff;
+    }
+    h2{font-size:16px;text-align:center;}
+    </style>
 </head>
 <body>
-<?=$data['print_code']?>
+<div class="main">
+    <h2><?=$data['clinic_name']?></h2>
+    <h2 style="margin:20px 0;">会诊号: <?=$data['print_code']?></h2>
+    <p>
+        <?=$data['print_time']?>
+    </p>
+</div>
 </body>
 </html>

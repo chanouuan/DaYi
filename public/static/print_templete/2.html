@@ -4,8 +4,71 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=0">
     <title>会诊单</title>
+    <style>
+    *{padding:0;margin:0;}
+    body{font-size:14px;line-height:1.2;color:#000;font-weight:700;font-family: "Microsoft YaHei","黑体";}
+    table{width:100%;border-collapse:collapse;border-top:1px solid #000;border-bottom:1px solid #000;margin: 5px 0;text-align:center;}
+    .main{width:558px;background-color:#fff;}
+    h2{font-size:18px;font-weight:700;text-align:center;}
+    p{overflow:hidden;vertical-align:middle;}
+    em{display:block;font-style:normal;width:50%;float:left;}
+    </style>
 </head>
 <body>
-<?=$data['doctor_name']?>
+<div class="main">
+    <p>NO. <?=$data['id']?></p>
+    <h2><?=$data['clinic_name']?></h2>
+    <p>
+        <em>医疗证/医保卡号:</em>
+        <em>处方单号:<?=$data['order_code']?></em>
+    </p>
+    <table cellspacing="0" cellpadding="0" border="0" style="text-align: left">
+        <tr>
+            <td width="25%">姓名:<?=$data['patient_name']?></td>
+            <td width="25%">性别:<?=$data['patient_gender']?></td>
+            <td width="25%">年龄:<?=$data['patient_age']?></td>
+            <td width="25%">手机:<?=$data['patient_tel']?></td>
+        </tr>
+        <tr>
+            <td colspan="2">主诉:<?=$data['patient_complaint']?></td>
+            <td colspan="2">过敏史:<?=$data['patient_allergies']?></td>
+        </tr>
+        <tr>
+            <td colspan="2">诊断:<?=$data['patient_diagnosis']?></td>
+            <td colspan="2">开具日期:<?=$data['print_time']?></td>
+        </tr>
+    </table>
+    <p>Rp.</p>
+    <table cellspacing="0" cellpadding="0" border="0" style="border: 0; text-align: left">
+        <?php foreach($data['notes'] as $k=>$v){ ?>
+        <tr>
+            <td  width="10%"><?=$k+1?>、</td>
+            <td  width="40%"><?=$v['name']?></td>
+            <td  width="40%"><?=$v['remark']?$v['remark']:$v['package_spec']?></td>
+            <td  width="10%"><?=$v['total_amount'].$v['unit']?></td>
+        </tr>
+        <?php if($v['category']==1){ ?>
+        <tr>
+            <td>&nbsp;</td>
+            <td>用法:<?=$v['usages_name']?></td>
+            <td colspan="2">频率:<?=$v['frequency_name']?> <?=$v['drug_days']?>天</td>
+        </tr>
+        <?php } ?>
+        <?php } ?>
+    </table>
+    <p style="text-align: right">总费用:<?=$data['pay']+$data['discount']?>元</p>
+    <table cellspacing="0" cellpadding="0" border="0" style="border: 0; text-align: left; border-top:1px solid #000;">
+        <tr>
+            <td width="12.5%">会诊医师:</td>
+            <td width="12.5%" style="border-bottom: 1px solid #000"><?=$data['doctor_name']?></td>
+            <td width="12.5%">审方药师:</td>
+            <td width="12.5%" style="border-bottom: 1px solid #000">&nbsp;</td>
+            <td width="12.5%">配药药师:</td>
+            <td width="12.5%" style="border-bottom: 1px solid #000">&nbsp;</td>
+            <td width="12.5%">发药药师:</td>
+            <td width="12.5%" style="border-bottom: 1px solid #000">&nbsp;</td>
+        </tr>
+    </table>
+</div>
 </body>
 </html>

@@ -81,12 +81,13 @@ class DoctorOrderModel extends Crud {
         $orderInfo['patient_name'] = $orderInfo['patient_name'] ? $orderInfo['patient_name'] : '无';
         $orderInfo['create_time'] = substr($orderInfo['create_time'], 0, 10);
         $orderInfo['payway'] = implode(',', array_column($orderInfo['payway'], 'payway'));
+        $orderInfo['order_code'] = str_replace(['-', ' ', ':'], '', $orderInfo['create_time']) . $orderInfo['id'];
 
         $orderInfo['print_time'] = date('Y-m-d H:i:s', TIMESTAMP);
         if (!$content = $this->parsePrintTemplete($type, $orderInfo)) {
             return error('模板不存在');
         }
-        
+
         return success([
             'content' => $content
         ]);

@@ -6,10 +6,10 @@
     <title>收费单</title>
     <style>
     *{padding:0;margin:0;}
-    body{font-size:15px;line-height:1.5;color:#000;font-weight:700;font-family: "黑体", "Microsoft YaHei";}
+    body{font-size:14px;line-height:1.2;color:#000;font-weight:700;font-family: "Microsoft YaHei","黑体";}
     table{width:100%;border-collapse:collapse;border-top:1px solid #000;border-bottom:1px solid #000;margin: 5px 0;text-align:center;}
-    .main{width:100%;background-color:#fff;margin:0 auto;}
-    h2{font-size:18px;text-align:center;}
+    .main{width:180px;background-color:#fff;}
+    h2{font-size:16px;text-align:center;}
     p{overflow:hidden;vertical-align:middle;}
     em{display:block;font-style:normal;width:50%;float:left;}
     </style>
@@ -18,10 +18,10 @@
 <div class="main">
     <h2><?=$data['clinic_name']?></h2>
     <h4>费用清单</h4>
-    <p>创建时间: <?=$data['create_time']?></p>
+    <p>创建时间:<?=$data['create_time']?></p>
     <p>
-        <em>姓名: <?=$data['patient_name']?></em>
-        <em>性别: <?=$data['patient_gender']?></em>
+        <em>姓名:<?=$data['patient_name']?></em>
+        <em>性别:<?=$data['patient_gender']?></em>
     </p>
     <table cellspacing="0" cellpadding="0" border="0">
         <tr>
@@ -33,26 +33,26 @@
         <?php foreach($data['notes'] as $v){ ?>
         <tr>
             <td style="text-align:left;"><?=$v['name']?></td>
-            <td><?=$v['total_amount']?></td>
+            <td><?=$v['total_amount'].$v['unit']?></td>
             <td><?=$v['unit_price']?></td>
             <td><?=$v['unit_price']*$v['total_amount']?></td>
         </tr>
         <?php } ?>
     </table>
     <p>
-        <em>收银员: <?=$data['charge_user_name']?></em>
-        <em>医生: <?=$data['doctor_name']?></em>
+        <em>收银员:<?=$data['charge_user_name']?></em>
+        <em>医生:<?=$data['doctor_name']?></em>
     </p>
     <p>
-        <em>实收金额: <?=$data['pay']?></em>
-        <em>优惠: <?=$data['discount']?></em>
+        <em>实付金额:<?=$data['pay']?></em>
+        <em>优惠:<?=$data['discount']?></em>
     </p>
     <p>
-        付费方式: <?=$data['payway']?>
+        付费方式:<?=$data['payway']?>
     </p>
     <p>谢谢惠顾，祝您身体健康！</p>
     <p>
-        打印时间: <?=$data['print_time']?>
+        <?=$data['print_time']?>
     </p>
 </div>
 </body>
