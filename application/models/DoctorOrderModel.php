@@ -107,7 +107,7 @@ class DoctorOrderModel extends Crud {
         include $filePath;
         $output = ob_get_contents();
         ob_end_clean();
-        return $output;
+        return $output{0} == '{' ? json_decode($output, true) : $output;
     }
 
     /**
@@ -531,7 +531,7 @@ class DoctorOrderModel extends Crud {
             if (!$post['export']) {
                 $pagesize = getPageParams($post['page'], $count, $post['page_size']);
             }
-            $list = $this->select($condition, 'id,enum_source,doctor_id,patient_name,patient_gender,patient_age,patient_tel,pay,discount,refund,payway,create_time,status', 'id desc', $pagesize['limitstr']);
+            $list = $this->select($condition, 'id,enum_source,print_code,doctor_id,patient_name,patient_gender,patient_age,patient_tel,pay,discount,refund,payway,create_time,status', 'id desc', $pagesize['limitstr']);
             $userNames = (new AdminModel())->getAdminNames(array_column($list, 'doctor_id'));
             foreach ($list as $k => $v) {
                 $list[$k]['source']      = OrderSource::getMessage($v['enum_source']);

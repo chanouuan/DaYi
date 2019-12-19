@@ -64,7 +64,8 @@ class ServerClinic extends ActionPDO {
             'createPayed'          => ['interval' => 1000],
             'notifyPayed'          => ['interval' => 1000],
             'indexCount'           => ['interval' => 1000],
-            'feedback'             => ['interval' => 1000]
+            'feedback'             => ['interval' => 1000],
+            'importCsv'            => ['interval' => 2000]
         ];
     }
 
@@ -92,6 +93,7 @@ class ServerClinic extends ActionPDO {
                 'getDrugList'        => 'saveDrug',
                 'getTreatmentList'   => 'saveDrug',
                 'saveTreatment'      => 'saveDrug',
+                'importCsv'          => 'saveDrug',
                 'getEmployeeList'    => 'saveEmployee',
                 'getEmployeeRole'    => 'saveEmployee',
                 'getRoleList'        => 'saveEmployee',
@@ -1204,7 +1206,7 @@ class ServerClinic extends ActionPDO {
      */
     public function stockDetail ()
     {
-        return (new StockModel($this->_G['user']['user_id']))->stockDetail(getgpc('stock_id'));
+        return (new StockModel($this->_G['user']['user_id']))->stockDetail($_POST);
     }
 
     /**
@@ -1308,6 +1310,35 @@ class ServerClinic extends ActionPDO {
     public function feedback ()
     {
         return (new FeedbackModel())->feedback($this->_G['user']['user_id'], $_POST);
+    }
+
+    /**
+     * 下载模板
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function downloadCsvTemplate ()
+    {
+        return (new ServerClinicModel())->downloadCsvTemplate(getgpc('type'));
+    }
+
+    /**
+     * 导入数据
+     * @login
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function importCsv ()
+    {
+        return (new ServerClinicModel())->importCsv($this->_G['user']['user_id'], getgpc('type'));
     }
 
 }

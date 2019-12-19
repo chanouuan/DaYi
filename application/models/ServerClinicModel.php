@@ -82,7 +82,7 @@ class ServerClinicModel extends Crud {
                 $xlzb[] = [
                     'name' => $v,
                     'value' => 0
-                ]; 
+                ];
             }
         }
         $xlzb = array_values($xlzb);
@@ -92,7 +92,7 @@ class ServerClinicModel extends Crud {
             'clinic_id'   => $clinic_id,
             'patient_id'  => ['>0'],
             'patient_age' => ['>0']
-        ], 'CONVERT(patient_age, UNSIGNED) as patient_age,count(*) as count', null, null, 'patient_age');
+        ], 'patient_age/12 as patient_age,count(*) as count', null, null, 'patient_age');
         $data = array_column($data, 'count', 'patient_age');
         $category = [
             '<7岁'    => [0, 7],
@@ -501,6 +501,223 @@ class ServerClinicModel extends Crud {
         $userInfo['unread_count'] = 0; // 未读消息数
 
         return success($userInfo);
+    }
+
+    /**
+     * 下载 csv 模板
+     * @return fixed
+     */
+    public function downloadCsvTemplate ($type)
+    {
+        if ($type == 1) {
+            $this->exportCsv('西药信息模板', '"药品名称
+(必填)","剂型
+(必填)","规格
+(必填)","剂量
+(必填)","剂量单位
+(必填)","制剂数量
+(必填)","制剂单位
+(必填)","库存单位
+(必填)","零售价
+(库存单位)
+(必填)","药品类型
+(必填)","拆零价
+(制剂单位)",国药准字,厂家,条形码,"药品编码
+(仅用于医保对照)",默认用法,默认频率,"入库数量
+(库存单位)","进货价
+(库存单位)"', []);
+        }
+        
+    }
+
+    /**
+     * 导入数据
+     * @return array
+     */
+    public function importCsv ($user_id, $type)
+    {
+        set_time_limit(300);
+
+        if ($_FILES['upfile']['error'] !== 0) {
+            return error('上传文件为空');
+        }
+        if (strtolower(substr(strrchr($_FILES['upfile']['name'], '.'), 1)) != 'csv') {
+            unlink($_FILES['upfile']['tmp_name']);
+            return error('上传文件格式错误');
+        }
+        if ($_FILES['upfile']['size'] > 10000000) {
+            unlink($_FILES['upfile']['tmp_name']);
+            return error('上传文件太大');
+        }
+
+        // 转码
+        if (false === file_put_contents($_FILES['upfile']['tmp_name'], $this->upEncodeUTF(file_get_contents($_FILES['upfile']['tmp_name'])))) {
+            unlink($_FILES['upfile']['tmp_name']);
+            return error($_FILES['upfile']['name'] . '转码失败');
+        }
+
+        if (false === ($handle = fopen($_FILES['upfile']['tmp_name'], "r"))) {
+            unlink($_FILES['upfile']['tmp_name']);
+            return error($_FILES['upfile']['name'] . '文件读取失败');
+        }
+
+        if ($type == 1) {
+            $field = ['name','dosage_type','package_spec','dosage_amount','dosage_unit','basic_amount','basic_unit','dispense_unit','retail_price','drug_type','basic_price','approval_num','manufactor_name','barcode','drug_code','usages','frequency','amount','purchase_price'];
+        }
+        
+        $list = [];
+        while(($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+            if (empty($data)) {
+                continue;
+            }
+            $arr = [];
+            foreach ($field as $k => $v) {
+                $arr[$v] = $this->upFilterData($data[$k]);
+            }
+            $list[] = $arr;
+        }
+        unset($arr, $list[0]);
+        fclose($handle);
+        unlink($_FILES['upfile']['tmp_name']);
+
+        if (!count($list)) {
+            return error('导入数据为空');
+        }
+
+        if ($type == 1) {
+            $result = $this->importWestDrug($user_id, $list);
+        }
+        $list = null;
+
+        return $result;
+    }
+
+    /**
+     * 西药信息导入
+     * @return array
+     */
+    private function importWestDrug($user_id, &$list)
+    {
+        $drugUnit = DictType::getDrugUnit();
+        $drugDosage = [
+            DrugType::NEUTRAL => DrugDosage::getNeutral(),
+            DrugType::WESTERN => DrugDosage::getWestern()
+        ];
+        // 效验数据
+        foreach ($list as $k => $v) {
+            if (!$v['name']) {
+                return error('[第' . ($k + 1) . '行] 药品名称不能为空！');
+            }
+            $list[$k]['drug_type'] = array_search($v['drug_type'], DrugType::$message);
+            if (!$list[$k]['drug_type']) {
+                return error('[第' . ($k + 1) . '行] 药品类型填写不正确（请填写西药/中成药）！');
+            }
+            $list[$k]['dosage_type'] = array_search($v['dosage_type'], $drugDosage[$list[$k]['drug_type']]);
+            if (!$list[$k]['dosage_type']) {
+                return error('[第' . ($k + 1) . '行] 剂型名称填写不正确！');
+            }
+            if (!$v['package_spec']) {
+                return error('[第' . ($k + 1) . '行] 规格不能为空！');
+            }
+            $list[$k]['dosage_amount'] = floatval($v['dosage_amount']);
+            if ($list[$k]['dosage_amount'] <= 0) {
+                return error('[第' . ($k + 1) . '行] 剂量必须大于0！');
+            }
+            if (!in_array($v['dosage_unit'], $drugUnit[DictType::UNIT_1])) {
+                return error('[第' . ($k + 1) . '行] 剂量单位填写不正确！');
+            }
+            $list[$k]['basic_amount'] = intval($v['basic_amount']);
+            if ($list[$k]['basic_amount'] <= 0) {
+                return error('[第' . ($k + 1) . '行] 制剂数量必须大于0！');
+            }
+            if (!in_array($v['basic_unit'], $drugUnit[DictType::UNIT_2])) {
+                return error('[第' . ($k + 1) . '行] 制剂单位填写不正确！');
+            }
+            if (!in_array($v['dispense_unit'], $drugUnit[DictType::UNIT_3])) {
+                return error('[第' . ($k + 1) . '行] 库存单位填写不正确！');
+            }
+            $list[$k]['retail_price'] = floatval($v['retail_price']);
+            if ($list[$k]['retail_price'] <= 0) {
+                return error('[第' . ($k + 1) . '行] 零售价必须大于0！');
+            }
+            $list[$k]['basic_price'] = floatval($v['basic_price']);
+            if ($list[$k]['basic_price'] < 0) {
+                return error('[第' . ($k + 1) . '行] 拆零价必须大于0，若不拆零就不必填写！');
+            }
+            $list[$k]['amount'] = intval($v['amount']);
+            if ($list[$k]['amount'] < 0) {
+                return error('[第' . ($k + 1) . '行] 入库数量不能小于0！');
+            }
+            $list[$k]['purchase_price'] = floatval($v['purchase_price']);
+            if ($list[$k]['purchase_price'] < 0) {
+                return error('[第' . ($k + 1) . '行] 进货价不能小于0！');
+            }
+            $list[$k]['usages'] = array_search($v['usages'], NoteUsage::$message);
+            $list[$k]['frequency'] = NoteFrequency::getCode($v['frequency']);
+        }
+        unset($drugUnit, $drugDosage);
+
+        // 合并重复数据
+        $list = array_values(array_column($list, null, 'name'));
+
+        print_r($list);
+    }
+
+    /**
+     * 上传数据转码 UTF-8
+     * @return string
+     */
+    private function upEncodeUTF($text)
+    {
+        if (!$encode = mb_detect_encoding($text, array('UTF-8','GB2312','GBK','ASCII','BIG5'))) {
+            return '';
+        }
+        if($encode != 'UTF-8') {
+            return mb_convert_encoding($text, 'UTF-8', $encode);
+        } else {
+            return $text;
+        }
+    }
+
+    /**
+     * 过滤上传数据
+     * @return string
+     */
+    private function upFilterData($data)
+    {
+        $data = trim(trim_space($data), '　');
+        $data = str_replace(["\r", "\n", "\t", '"', '\''], '', $data);
+        $data = mb_substr($data, 0, 200, 'UTF-8');
+        $data = htmlspecialchars(rtrim($data, "\0"), ENT_QUOTES);
+        return $data;
+    }
+
+    /**
+     * 导出为 csv
+     * @return fixed
+     */
+    private function exportCsv ($fileName, $header, array $list)
+    {
+        $fileName = $fileName . '_' . date('Ymd', TIMESTAMP);
+        $fileName = preg_match('/(Chrome|Firefox)/i', $_SERVER['HTTP_USER_AGENT']) && !preg_match('/edge/i', $_SERVER['HTTP_USER_AGENT']) ? $fileName : urlencode($fileName);
+
+        header('cache-control:public');
+        header('content-type:application/octet-stream');
+        header('content-disposition:attachment; filename=' . $fileName . '.csv');
+
+        $input = [$header];
+        foreach ($list as $k => $v) {
+            foreach ($v as $kk => $vv) {
+                if (false !== strpos($vv, ',')) {
+                    $v[$kk] = '"' . $vv . '"';
+                }
+            }
+            $input[] = implode(',', $v);
+        }
+        unset($list);
+
+        echo mb_convert_encoding(implode("\n", $input), 'GB2312', 'UTF-8');
+        exit(0);
     }
 
 }

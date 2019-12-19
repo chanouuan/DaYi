@@ -3,6 +3,7 @@
 namespace app\models;
 
 use app\common\Gender;
+use app\library\PinYin;
 use Crud;
 
 class PatientModel extends Crud {
@@ -17,7 +18,14 @@ class PatientModel extends Crud {
      */
     public function search ($name, $limit = 5) 
     {
-        if (!$list = $this->select(['name' => ['like', $name . '%'], 'status' => 1], 'id,name,telephone,birthday,gender', 'id desc', $limit)) {
+        if (!$name) {
+            return [];
+        }
+        if (!$list = $this->select([
+            'status' => 1,
+            'name' => ['like', $name . '%', 'and ('],
+            'py' => ['like', $name . '%', 'or', ')'],   
+            ], 'id,name,telephone,birthday,gender', 'id desc', $limit)) {
             return [];
         }
         foreach ($list as $k => $v) {
@@ -38,6 +46,10 @@ class PatientModel extends Crud {
      */
     public function insertUpdate ($name, $telephone = null, $age = null, $gender = null)
     {
+        if (!$name) {
+            return false;
+        }
+
         $data = [
             'name'      => $name,
             'telephone' => $telephone,
@@ -49,6 +61,7 @@ class PatientModel extends Crud {
             return $patientInfo['id'];
         }
 
+        $data['py'] = (new PinYin())->get_first_py($data['name']);
         $data['create_time'] = date('Y-m-d H:i:s', TIMESTAMP);
         return $this->getDb()->insert($data, null, true);
     }
