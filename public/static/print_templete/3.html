@@ -1,3 +1,34 @@
+<?php
+    $result = [
+        'drugNumber' => count($data['notes']),
+        'bodyinfo' => [
+            'userName' => $data['charge_user_name'],
+            'hostName' => $data['clinic_name'],
+            'headtitle' => '费用清单',
+            'creat_Time' => $data['create_time'],
+            'pay_method' => $data['payway'],
+            'pay_Concessions' => strval($data['discount']),
+            'doctor_name' => $data['doctor_name'],
+            'patient_name' => $data['patient_name'],
+            'patient_sex' => $data['patient_gender'],
+            'pay_reality' => strval($data['pay']),
+            'remark' => '谢谢惠顾，祝您身体健康！',
+            'print_time' => $data['print_time'],
+            'total_money' => strval($data['pay'] + $data['discount'])
+        ],
+        'DrugInfo' => []
+    ];
+    foreach ($data['notes'] as $v) {
+        $result['DrugInfo'][] = [
+            'drug_name' => $v['name'],
+            'drug_num' => $v['total_amount'] . $v['unit'],
+            'drug_value' => strval($v['unit_price']),
+            'drug_total' => strval($v['unit_price'] * $v['total_amount'])
+        ];
+    }
+    echo json_encode($result);
+    return;
+?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -6,9 +37,9 @@
     <title>收费单</title>
     <style>
     *{padding:0;margin:0;}
-    body{font-size:14px;line-height:1.2;color:#000;font-weight:700;font-family: "Microsoft YaHei","黑体";}
+    body{font-size:14px;line-height:1.2;color:#000;font-weight:500;font-family: "Microsoft YaHei","黑体";-webkit-font-smoothing: antialiased}
     table{width:100%;border-collapse:collapse;border-top:1px solid #000;border-bottom:1px solid #000;margin: 5px 0;text-align:center;}
-    .main{width:180px;background-color:#fff;}
+    .main{width:48mm;background-color:#ffffff;}
     h2{font-size:16px;text-align:center;}
     p{overflow:hidden;vertical-align:middle;}
     em{display:block;font-style:normal;width:50%;float:left;}

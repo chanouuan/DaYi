@@ -1,3 +1,15 @@
+<?php
+    $result = [
+        'bodyinfo' => [
+            'hostName' => $data['clinic_name'],
+            'headtitle' => '会诊号',
+            'id_num' => strval($data['print_code']),
+            'print_time' => $data['print_time']
+        ]
+    ];
+    echo json_encode($result);
+    return;
+?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -8,7 +20,7 @@
     *{padding:0;margin:0;}
     body{font-size:14px;line-height:1.2;color:#000;font-weight:700;font-family:"Microsoft YaHei","黑体";}
     .main{
-      width: 180px;
+      width: 48mm;
       background: #fff;
     }
     h2{font-size:16px;text-align:center;}
