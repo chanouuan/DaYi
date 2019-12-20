@@ -18,6 +18,20 @@ class Notify extends ActionPDO {
         $this->success($result['message'], gurl('notify/demo'));
     }
 
+    public function createSign ()
+    {
+        $data = [];
+        for ($i=0; $i < 100; $i++) {
+            $code = substr(str_shuffle('023456789abcdefghijkmnopqrstuvwxyz'), 8, 4);
+            if (!isset($data[$code])) {
+                $data[$code] = ['auth_code' => $code];
+            }
+        }
+        $data = array_values($data);
+        DB::getInstance()->table('dayi_invite_code')->insert($data);
+        echo 'ok';
+    }
+
     public function demo ()
     {
         $condition = [];
