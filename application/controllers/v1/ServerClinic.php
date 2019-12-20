@@ -105,7 +105,8 @@ class ServerClinic extends ActionPDO {
                 'delStock'           => 'addStock',
                 'batchDetail'        => 'addStock',
                 'stockDetail'        => 'addStock',
-                'editStock'          => 'addStock'
+                'editStock'          => 'addStock',
+                'saveClinicConfig'   => 'baseConfig'
             ];
             // 权限值
             $action = isset($map[$this->_action]) ? $map[$this->_action] : $this->_action;
