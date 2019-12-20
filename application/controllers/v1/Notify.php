@@ -18,6 +18,12 @@ class Notify extends ActionPDO {
         $this->success($result['message'], gurl('notify/demo'));
     }
 
+    public function getSign ()
+    {
+        $list = DB::getInstance()->table('dayi_invite_code')->select();
+        return compact('list');
+    }
+
     public function createSign ()
     {
         $data = [];

@@ -110,6 +110,17 @@ class DrugModel extends Crud {
     }
 
     /**
+     * 药品是否存在
+     * @return bool
+     */
+    public function drugExists (arrar $condition)
+    {
+        $condition['clinic_id'] = $this->userInfo['clinic_id'];
+        $info = $this->find($condition, 'id');
+        return $info ? $info['id'] : false;
+    }
+
+    /**
      * 添加药品
      * @return array
      */
