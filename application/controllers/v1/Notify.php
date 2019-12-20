@@ -28,7 +28,7 @@ class Notify extends ActionPDO {
     {
         $data = [];
         for ($i=0; $i < 100; $i++) {
-            $code = substr(str_shuffle('023456789abcdefghijkmnopqrstuvwxyz'), 8, 4);
+            $code = substr(str_shuffle('23456789abcdefghjkmnpqrstuvwxyz'), 8, 4);
             if (!isset($data[$code])) {
                 $data[$code] = ['auth_code' => $code];
             }
