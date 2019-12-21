@@ -104,7 +104,7 @@ class GenerateCache
 
         // 检查过期
         if (isset($clinicInfo['expire_date'])) {
-            $clinicInfo['vip_expire'] = strtotime($clinicInfo['expire_date'] . '23:59:59') > TIMESTAMP ? 0 : 1;
+            $clinicInfo['vip_expire'] = (!$clinicInfo['expire_date'] || strtotime($clinicInfo['expire_date'] . '23:59:59') > TIMESTAMP) ? 0 : 1;
         }
 
         return $clinicInfo;

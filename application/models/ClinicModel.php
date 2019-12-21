@@ -68,7 +68,7 @@ class ClinicModel extends Crud {
         }
 
         // 判断升配或降配 0不变 1升配 2降配
-        if ($clinicInfo['vip_level']) {
+        if ($clinicInfo['vip_level'] && $clinicInfo['expire_date']) {
             if ($clinicInfo['vip_level'] == $saleInfo['vip_level']) {
                 $changeLevel = 0;
             } else {
@@ -104,7 +104,7 @@ class ClinicModel extends Crud {
 
         // 计算有效期截止日期
         if ($changeLevel === 0) {
-            $beginTime = $clinicInfo['vip_level'] ? strtotime($clinicInfo['expire_date']) : strtotime(date('Y-m-d', TIMESTAMP));
+            $beginTime = ($clinicInfo['vip_level'] && $clinicInfo['expire_date']) ? strtotime($clinicInfo['expire_date']) : strtotime(date('Y-m-d', TIMESTAMP));
         } else {
             $beginTime = strtotime(date('Y-m-d', TIMESTAMP));
         }
@@ -225,7 +225,7 @@ class ClinicModel extends Crud {
         $clinicInfo['daily_cost'] = round_dollar($clinicInfo['daily_cost']);
 
         // 判断升配或降配 0不变 1升配 2降配
-        if ($clinicInfo['vip_level']) {
+        if ($clinicInfo['vip_level'] && $clinicInfo['expire_date']) {
             if ($clinicInfo['vip_level'] == $post['level']) {
                 $clinicInfo['change_level'] = 0;
             } else {
@@ -349,9 +349,9 @@ class ClinicModel extends Crud {
         if (!validate_telephone($post['telephone'])) {
             return error('手机号格式不正确');
         }
-        if (strlen($post['invite_code']) !== 4) {
-            return error('请填写邀请码');
-        }
+        // if (strlen($post['invite_code']) !== 4) {
+        //     return error('请填写邀请码');
+        // }
 
         $userModel = new UserModel();
 
@@ -361,14 +361,14 @@ class ClinicModel extends Crud {
         }
 
         // 邀请码验证
-        if (!$this->getDb()->table('dayi_invite_code')->where(['auth_code' => $post['invite_code']])->count()) {
-            return error('邀请码不存在，请重新输入');
-        }
+        // if (!$this->getDb()->table('dayi_invite_code')->where(['auth_code' => $post['invite_code']])->count()) {
+        //     return error('邀请码不存在，请重新输入');
+        // }
 
         // 邀请码只能用一次
-        if (!$this->getDb()->table('dayi_invite_code')->where(['auth_code' => $post['invite_code']])->delete()) {
-            return error('该邀请码已使用过');
-        }
+        // if (!$this->getDb()->table('dayi_invite_code')->where(['auth_code' => $post['invite_code']])->delete()) {
+        //     return error('该邀请码已使用过');
+        // }
 
         if (!$cluster = $this->getDbCluster(MICROTIME)) {
             return error('获取分区失败');
@@ -382,7 +382,8 @@ class ClinicModel extends Crud {
                     'tel'         => $post['telephone'],
                     'db_instance' => $cluster['instance'],
                     'db_chunk'    => $cluster['chunk'],
-                    'expire_date' => date('Y-m-d', TIMESTAMP + (86400 * 30)) // 试用期 30 天
+                    'vip_level'   => VipLevel::LIMIT,
+                    // 'expire_date' => date('Y-m-d', TIMESTAMP + (86400 * 30)) // 试用期 30 天
                 ], false, true)) {
                 return false;
             }
@@ -394,7 +395,7 @@ class ClinicModel extends Crud {
             return $clinicId;
         })) {
             // 回滚邀请码
-            $this->getDb()->table('dayi_invite_code')->insert(['auth_code' => $post['invite_code']]);
+            // $this->getDb()->table('dayi_invite_code')->insert(['auth_code' => $post['invite_code']]);
             return error('注册失败');
         }
 

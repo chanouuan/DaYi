@@ -12,12 +12,14 @@ class VipLevel
     const SIMPLE = 1;
     const BASE   = 2;
     const HIGH   = 3;
+    const LIMIT  = 4;
 
     static $message = [
         0 => '试用版',
         1 => '基础版',
         2 => '高级版',
-        3 => '豪华版'
+        3 => '豪华版',
+        4 => '限量版'
     ];
 
     /**
@@ -85,6 +87,7 @@ class VipLevel
             self::SIMPLE => 7,
             self::BASE   => 30,
             self::HIGH   => 180,
+            self::LIMIT  => 3
         ];
         return isset($allowSave[$vip_level]) ? $allowSave[$vip_level] : 0;
     }
@@ -95,6 +98,9 @@ class VipLevel
      */
     public static function getUseDate ($expire_date)
     {
+        if (!$expire_date) {
+            return '无限期';
+        }
         $expire_date = strtotime($expire_date . ' 23:59:59');
         if ($expire_date <= TIMESTAMP) {
             return '已到期';
@@ -108,6 +114,9 @@ class VipLevel
      */
     public static function getUseDays ($expire_date)
     {
+        if (!$expire_date) {
+            return 0;
+        }
         $expire_date = strtotime($expire_date . ' 23:59:59');
         if ($expire_date <= TIMESTAMP) {
             return 0;
