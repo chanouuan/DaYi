@@ -25,7 +25,7 @@ class ServerClinic extends ActionPDO {
         return [
             'login'                => ['interval' => 1000],
             'sendSms'              => ['interval' => 1000, 'rule' => '5|10|20'],
-            'regClinic'            => ['interval' => 1000, 'rule' => '20|30|50'],
+            'regClinic'            => ['interval' => 1000, 'rule' => '5|10|20'],
             'getClinicDoctors'     => ['interval' => 1000],
             'microLogin'           => ['interval' => 1000],
             'logout'               => ['interval' => 1000],

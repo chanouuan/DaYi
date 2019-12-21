@@ -76,7 +76,7 @@ class GenerateCache
         if (false === F($keyName)) {
             if (!$clinicInfo = DB::getInstance()
                 ->table('dayi_clinic')
-                ->field('id,db_instance,db_chunk,is_ds,is_cp,is_rp,is_pc,vip_level,expire_date,daily_cost,status')
+                ->field('id,name,db_instance,db_chunk,is_ds,is_cp,is_rp,is_pc,vip_level,expire_date,daily_cost,pay_sheet_size,status')
                 ->where(['id' => $clinic_id])
                 ->limit(1)
                 ->find()) {
@@ -90,7 +90,7 @@ class GenerateCache
             } else {
                 if (!$clinicInfo = DB::getInstance()
                     ->table('dayi_clinic')
-                    ->field('id,db_instance,db_chunk,is_ds,is_cp,is_rp,is_pc,vip_level,expire_date,daily_cost,status')
+                    ->field('id,name,db_instance,db_chunk,is_ds,is_cp,is_rp,is_pc,vip_level,expire_date,daily_cost,pay_sheet_size,status')
                     ->where(['id' => $clinic_id])
                     ->limit(1)
                     ->find()) {

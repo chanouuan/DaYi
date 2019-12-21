@@ -201,12 +201,14 @@ class DrugModel extends Crud {
             }
         } else {
             $data['create_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-            if (!$this->getDb()->insert($data)) {
+            if (!$post['id'] = $this->getDb()->insert($data, false, true)) {
                 return error('请勿添加重复的药品/材料！');
             }
         }
         
-        return success('ok');
+        return success([
+            'drug_id' => $post['id']
+        ]);
     }
 
     /**

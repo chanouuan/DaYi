@@ -660,6 +660,22 @@ class ServerClinicModel extends Crud {
         // 合并重复数据
         $list = array_values(array_column($list, null, 'name'));
 
+        $drugModel = new DrugModel($user_id);
+
+        foreach ($list as $k => $v) {
+            $list[$k]['id'] = $drugModel->drugExists(['name' => $v['name']]);
+            $list[$k]['status'] = 1;
+            // 保存药品
+            $result = $drugModel->saveDrug($list[$k]);
+            if ($result['errorcode'] !== 0) {
+                return error('「' . $v['name'] . '」保存失败，请重试');
+            }
+            $list[$k]['id'] = $result['result']['drug_id'];
+            if ($k % 10 == 0) {
+                usleep(20000);
+            }
+        }
+
         print_r($list);
     }
 

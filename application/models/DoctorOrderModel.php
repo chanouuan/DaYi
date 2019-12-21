@@ -66,38 +66,35 @@ class DoctorOrderModel extends Crud {
      */
     public function printTemplete ($type, $order_id)
     {
-        $orderInfo = $this->getDoctorOrderDetail($order_id);
-        if ($orderInfo['errorcode'] !== 0) {
-            return $orderInfo;
+        $data = $this->getDoctorOrderDetail($order_id);
+        if ($data['errorcode'] !== 0) {
+            return $data;
         }
-        $orderInfo = $orderInfo['result'];
+        $data = $data['result'];
 
-        $clinicInfo = (new ClinicModel())->find(['id' => $this->userInfo['clinic_id']], 'name');
-        $orderInfo['clinic_name'] = $clinicInfo['name'];
+        $clinicInfo = GenerateCache::getClinic($this->userInfo['clinic_id']);
+        $data['clinic_name']    = $clinicInfo['name'];
+        $data['pay_sheet_size'] = $clinicInfo['pay_sheet_size'];
 
-        $adminInfo = (new AdminModel())->getAdminInfo($orderInfo['charge_user_id']);
-        $orderInfo['charge_user_name'] = $adminInfo['nickname'];
+        $data['payway']      = implode(',', array_column($data['payway'], 'payway'));
+        $data['create_time'] = substr($data['create_time'], 0, 10);
+        $data['order_code']  = str_replace(['-', ' ', ':'], '', $data['create_time']) . $data['id'];
+        $data['print_time']  = date('Y-m-d H:i:s', TIMESTAMP);
 
-        $orderInfo['patient_name'] = $orderInfo['patient_name'] ? $orderInfo['patient_name'] : '无';
-        $orderInfo['create_time'] = substr($orderInfo['create_time'], 0, 10);
-        $orderInfo['payway'] = implode(',', array_column($orderInfo['payway'], 'payway'));
-        $orderInfo['order_code'] = str_replace(['-', ' ', ':'], '', $orderInfo['create_time']) . $orderInfo['id'];
-
-        $orderInfo['print_time'] = date('Y-m-d H:i:s', TIMESTAMP);
-        if (!$content = $this->parsePrintTemplete($type, $orderInfo)) {
+        // 300会诊单 301收费单 302会诊号
+        if (!$output = $this->parsePrintTemplete($type, $data)) {
             return error('模板不存在');
         }
 
-        return success([
-            'content' => $content
-        ]);
+        unset($data);
+        return success($output);
     }
 
     /**
      * 解析打印模板
      * @return string
      */
-    protected function parsePrintTemplete ($type, array $data)
+    protected function parsePrintTemplete ($type, array &$data)
     {
         $filePath = APPLICATION_PATH . '/public/static/print_templete/' . intval($type) . '.html';
         if (!file_exists($filePath)) {
@@ -107,7 +104,16 @@ class DoctorOrderModel extends Crud {
         include $filePath;
         $output = ob_get_contents();
         ob_end_clean();
-        return $output{0} == '{' ? json_decode($output, true) : $output;
+        if ($output{0} == '{') {
+            $output = json_decode($output, true);
+            return [
+                'print_size' => $output['print_size'],
+                'content' => $output
+            ];
+        }
+        return [
+            'content' => $output
+        ];
     }
 
     /**
@@ -377,25 +383,6 @@ class DoctorOrderModel extends Crud {
     }
 
     /**
-     * 联诊
-     * @return array
-     */
-    public function unionConsultation ($print_code)
-    {
-        $print_code = intval($print_code);
-
-        if (!$print_code) {
-            return error('请填写取号号码');
-        }
-
-        if (!$orderInfo = $this->find(['clinic_id' => $this->userInfo['clinic_id'], 'print_code' => $print_code, 'status' => OrderStatus::NOPAY], 'id')) {
-            return error('本次会诊已结束');
-        }
-
-        return $this->getDoctorOrderDetail($orderInfo['id']);
-    }
-
-    /**
      * 获取会诊单详情
      * @return array
      */
@@ -436,8 +423,12 @@ class DoctorOrderModel extends Crud {
         }
 
         // 获取会诊医生
-        $doctorInfo = (new AdminModel())->getAdminInfo($orderInfo['doctor_id']);
-        $orderInfo['doctor_name'] = $doctorInfo['nickname'];
+        $adminNames = (new AdminModel())->getAdminNames([
+            $orderInfo['doctor_id'], $orderInfo['charge_user_id']
+        ]);
+        $orderInfo['doctor_name'] = strval($adminNames[$orderInfo['doctor_id']]);
+        $orderInfo['charge_user_name'] = strval($adminNames[$orderInfo['charge_user_id']]);
+        unset($adminNames);
 
         // 获取处方笺
         $orderInfo['notes'] = [];

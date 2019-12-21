@@ -288,22 +288,13 @@ class ClinicModel extends Crud {
     {
         $data = [];
         $data['name']    = trim_space($post['name'], 0, 20);
-        $data['tel']     = trim_space($post['tel'], 0, 11);
-        $data['address'] = trim_space($post['address'], 0, 80);
         $data['is_ds']   = $post['is_ds'] ? 1 : 0;
         $data['is_cp']   = $post['is_cp'] ? 1 : 0;
         $data['is_rp']   = $post['is_rp'] ? 1 : 0;
         $data['is_pc']   = $post['is_pc'] ? 1 : 0;
-
-        if ($data['tel'] && !validate_telephone($data['tel'])) {
-            return error('手机号格式不正确');
-        }
+        $data['pay_sheet_size'] = trim_space($post['pay_sheet_size'], 0, 10);
 
         $userInfo = (new AdminModel())->checkAdminInfo($user_id);
-
-        if (!$clinicInfo = GenerateCache::getClinic($userInfo['clinic_id'])) {
-            return error('当前诊所未找到');
-        }
 
         if (false === ($result = $this->getDb()->where(['id' => $userInfo['clinic_id']])->update($data))) {
             return error('保存配置失败');
