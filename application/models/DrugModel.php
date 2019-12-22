@@ -113,7 +113,7 @@ class DrugModel extends Crud {
      * 药品是否存在
      * @return bool
      */
-    public function drugExists (arrar $condition)
+    public function drugExists (array $condition)
     {
         $condition['clinic_id'] = $this->userInfo['clinic_id'];
         $info = $this->find($condition, 'id');
@@ -138,8 +138,8 @@ class DrugModel extends Crud {
         $data['manufactor_name'] = trim_space($post['manufactor_name'], 0, 30);
         $data['basic_amount']    = $post['basic_amount'] ? max(0, intval($post['basic_amount'])) : null;
         $data['dosage_amount']   = $post['dosage_amount'] ? max(0, floatval($post['dosage_amount'])) : null;
-        $data['py_code']         = trim_space($post['py_code'], 0, 20);
-        $data['wb_code']         = trim_space($post['wb_code'], 0, 20);
+        $data['py_code']         = trim_space(strtolower($post['py_code']), 0, 20);
+        $data['wb_code']         = trim_space(strtolower($post['wb_code']), 0, 20);
         $data['dosage_type']     = DrugDosage::format($post['dosage_type']);
         $data['barcode']         = trim_space($post['barcode'], 0, 20);
         $data['goods_name']      = trim_space($post['goods_name'], 0, 30);
@@ -187,6 +187,13 @@ class DrugModel extends Crud {
             }
             if (!$data['dosage_unit']) {
                 return error('剂量单位不能为空');
+            }
+        }
+
+        // 去掉 null
+        foreach ($data as $k => $v) {
+            if (is_null($v)) {
+                unset($data[$k]);
             }
         }
         
@@ -325,7 +332,7 @@ class DrugModel extends Crud {
                     $v['amount_unit']
                 ];
             }
-            $this->exportCsv('库存列表', '编号,名称,类型,规格,厂家,零售价,进货价,库存', $input);
+            export_csv_data('库存列表', '编号,名称,类型,规格,厂家,零售价,进货价,库存', $input);
         }
 
         return success([
@@ -333,34 +340,6 @@ class DrugModel extends Crud {
             'page_size' => $post['page_size'],
             'list' => $list ? $list : []
         ]);
-    }
-
-    /**
-     * 导出为 csv
-     * @return fixed
-     */
-    private function exportCsv ($fileName, $header, array $list)
-    {
-        $fileName = $fileName . '_' . date('Ymd', TIMESTAMP);
-        $fileName = preg_match('/(Chrome|Firefox)/i', $_SERVER['HTTP_USER_AGENT']) && !preg_match('/edge/i', $_SERVER['HTTP_USER_AGENT']) ? $fileName : urlencode($fileName);
-
-        header('cache-control:public');
-        header('content-type:application/octet-stream');
-        header('content-disposition:attachment; filename=' . $fileName . '.csv');
-
-        $input = [$header];
-        foreach ($list as $k => $v) {
-            foreach ($v as $kk => $vv) {
-                if (false !== strpos($vv, ',')) {
-                    $v[$kk] = '"' . $vv . '"';
-                }
-            }
-            $input[] = implode(',', $v);
-        }
-        unset($list);
-
-        echo mb_convert_encoding(implode("\n", $input), 'GB2312', 'UTF-8');
-        exit(0);
     }
 
 }

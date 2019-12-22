@@ -553,7 +553,7 @@ class DoctorOrderModel extends Crud {
                     $v['create_time']
                 ];
             }
-            $this->exportCsv('订单列表', '编号,来源,患者姓名,患者性别,患者年龄,患者手机,会诊医师,已收金额,优惠金额,已退金额,付款方式,状态,时间', $input);
+            export_csv_data('订单列表', '编号,来源,患者姓名,患者性别,患者年龄,患者手机,会诊医师,已收金额,优惠金额,已退金额,付款方式,状态,时间', $input);
         }
 
         return success([
@@ -992,34 +992,6 @@ class DoctorOrderModel extends Crud {
         $code[] = (rand() % 10) . (rand() % 10) . (rand() % 10) . (rand() % 10);
         $code[] = str_pad(substr($user_id, -4),4,'0',STR_PAD_LEFT);
         return implode('', $code);
-    }
-
-    /**
-     * 导出为 csv
-     * @return fixed
-     */
-    private function exportCsv ($fileName, $header, array $list)
-    {
-        $fileName = $fileName . '_' . date('Ymd', TIMESTAMP);
-        $fileName = preg_match('/(Chrome|Firefox)/i', $_SERVER['HTTP_USER_AGENT']) && !preg_match('/edge/i', $_SERVER['HTTP_USER_AGENT']) ? $fileName : urlencode($fileName);
-
-        header('cache-control:public');
-        header('content-type:application/octet-stream');
-        header('content-disposition:attachment; filename=' . $fileName . '.csv');
-
-        $input = [$header];
-        foreach ($list as $k => $v) {
-            foreach ($v as $kk => $vv) {
-                if (false !== strpos($vv, ',')) {
-                    $v[$kk] = '"' . $vv . '"';
-                }
-            }
-            $input[] = implode(',', $v);
-        }
-        unset($list);
-
-        echo mb_convert_encoding(implode("\n", $input), 'GB2312', 'UTF-8');
-        exit(0);
     }
 
 }

@@ -36,9 +36,6 @@ class TreatmentModel extends Crud {
         if (!$data['clinic_id']) {
             return error('门诊不能为空');
         }
-        if (!$data['ident']) {
-            return error('项目编号不能为空');
-        }
         if (!$data['name']) {
             return error('项目名称不能为空');
         }
@@ -47,6 +44,13 @@ class TreatmentModel extends Crud {
         }
         if (!$data['unit']) {
             return error('项目不能为空');
+        }
+
+        // 去掉 null
+        foreach ($data as $k => $v) {
+            if (is_null($v)) {
+                unset($data[$k]);
+            }
         }
         
         // 新增 or 编辑
@@ -66,6 +70,16 @@ class TreatmentModel extends Crud {
         }
         
         return success('ok');
+    }
+
+    /**
+     * 项目是否存在
+     * @return bool
+     */
+    public function treatmentExists (array $condition)
+    {
+        $info = $this->find($condition, 'id');
+        return $info ? $info['id'] : false;
     }
 
     /**

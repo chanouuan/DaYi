@@ -14,6 +14,7 @@ use app\common\StockType;
 use app\common\StockWay;
 use app\common\GenerateCache;
 use app\common\OrderSource;
+use app\common\Royalty;
 use Crud;
 
 class ServerClinicModel extends Crud {
@@ -510,7 +511,7 @@ class ServerClinicModel extends Crud {
     public function downloadCsvTemplate ($type)
     {
         if ($type == 1) {
-            $this->exportCsv('西药信息模板', '"药品名称
+            export_csv_data('西药信息模板', '"药品名称
 (必填)","剂型
 (必填)","规格
 (必填)","剂量
@@ -521,13 +522,34 @@ class ServerClinicModel extends Crud {
 (必填)","零售价
 (库存单位)
 (必填)","药品类型
+西药/中成药
 (必填)","拆零价
 (制剂单位)",国药准字,厂家,条形码,"药品编码
 (仅用于医保对照)",默认用法,默认频率,"入库数量
-(库存单位)","进货价
-(库存单位)"', []);
+(库存单位)","进货单价
+(库存单位)"');
         }
-        
+        if ($type == 2) {
+            export_csv_data('中药信息模板', '"中药名称
+(必填)","规格
+(必填)","零售单位
+(必填)","零售价
+(必填)",厂商,默认用法,入库数量,进货单价');
+        }
+        if ($type == 3) {
+            export_csv_data('材料信息模板', '"材料名称
+(必填)","规格
+(必填)","零售单位
+(必填)","零售价
+(必填)",厂家,入库数量,进货单价');
+        }
+        if ($type == 4) {
+            export_csv_data('诊疗项目模板', '"项目名称
+(必填)","单价
+(必填)","单位
+(必填)",项目编号,"提成方式
+(提成比例/固定金额)",提成数值');
+        }
     }
 
     /**
@@ -536,7 +558,7 @@ class ServerClinicModel extends Crud {
      */
     public function importCsv ($user_id, $type)
     {
-        set_time_limit(300);
+        set_time_limit(600);
 
         if ($_FILES['upfile']['error'] !== 0) {
             return error('上传文件为空');
@@ -563,6 +585,12 @@ class ServerClinicModel extends Crud {
 
         if ($type == 1) {
             $field = ['name','dosage_type','package_spec','dosage_amount','dosage_unit','basic_amount','basic_unit','dispense_unit','retail_price','drug_type','basic_price','approval_num','manufactor_name','barcode','drug_code','usages','frequency','amount','purchase_price'];
+        } elseif ($type == 2) {
+            $field = ['name','package_spec','dispense_unit','retail_price','manufactor_name','usages','amount','purchase_price'];
+        } elseif ($type == 3) {
+            $field = ['name','package_spec','dispense_unit','retail_price','manufactor_name','amount','purchase_price'];
+        } elseif ($type == 4) {
+            $field = ['name','price','unit','ident','royalty','royalty_ratio'];
         }
         
         $list = [];
@@ -586,9 +614,15 @@ class ServerClinicModel extends Crud {
 
         if ($type == 1) {
             $result = $this->importWestDrug($user_id, $list);
+        } elseif ($type == 2) {
+            $result = $this->importChineseDrug($user_id, $list);
+        } elseif ($type == 3) {
+            $result = $this->importMaterialDrug($user_id, $list);
+        } elseif ($type == 4) {
+            $result = $this->importTreatment($user_id, $list);
         }
-        $list = null;
 
+        $list = null;
         return $result;
     }
 
@@ -603,18 +637,20 @@ class ServerClinicModel extends Crud {
             DrugType::NEUTRAL => DrugDosage::getNeutral(),
             DrugType::WESTERN => DrugDosage::getWestern()
         ];
+        $pinYin = new \app\library\PinYin();
         // 效验数据
         foreach ($list as $k => $v) {
             if (!$v['name']) {
                 return error('[第' . ($k + 1) . '行] 药品名称不能为空！');
             }
+            $list[$k]['py_code'] = $pinYin->get_first_py($v['name']);
             $list[$k]['drug_type'] = array_search($v['drug_type'], DrugType::$message);
-            if (!$list[$k]['drug_type']) {
+            if (!DrugType::isWestNeutralDrug($list[$k]['drug_type'])) {
                 return error('[第' . ($k + 1) . '行] 药品类型填写不正确（请填写西药/中成药）！');
             }
             $list[$k]['dosage_type'] = array_search($v['dosage_type'], $drugDosage[$list[$k]['drug_type']]);
             if (!$list[$k]['dosage_type']) {
-                return error('[第' . ($k + 1) . '行] 剂型名称填写不正确！');
+                return error('[第' . ($k + 1) . '行] 剂型名称填写不正确！<br/>(' . implode(',', $drugDosage[$list[$k]['drug_type']]) . ')');
             }
             if (!$v['package_spec']) {
                 return error('[第' . ($k + 1) . '行] 规格不能为空！');
@@ -624,17 +660,17 @@ class ServerClinicModel extends Crud {
                 return error('[第' . ($k + 1) . '行] 剂量必须大于0！');
             }
             if (!in_array($v['dosage_unit'], $drugUnit[DictType::UNIT_1])) {
-                return error('[第' . ($k + 1) . '行] 剂量单位填写不正确！');
+                return error('[第' . ($k + 1) . '行] 剂量单位填写不正确！<br/>(' . implode(',', $drugUnit[DictType::UNIT_1]) . ')');
             }
             $list[$k]['basic_amount'] = intval($v['basic_amount']);
             if ($list[$k]['basic_amount'] <= 0) {
                 return error('[第' . ($k + 1) . '行] 制剂数量必须大于0！');
             }
             if (!in_array($v['basic_unit'], $drugUnit[DictType::UNIT_2])) {
-                return error('[第' . ($k + 1) . '行] 制剂单位填写不正确！');
+                return error('[第' . ($k + 1) . '行] 制剂单位填写不正确！<br/>(' . implode(',', $drugUnit[DictType::UNIT_2]) . ')');
             }
             if (!in_array($v['dispense_unit'], $drugUnit[DictType::UNIT_3])) {
-                return error('[第' . ($k + 1) . '行] 库存单位填写不正确！');
+                return error('[第' . ($k + 1) . '行] 库存单位填写不正确！<br/>(' . implode(',', $drugUnit[DictType::UNIT_3]) . ')');
             }
             $list[$k]['retail_price'] = floatval($v['retail_price']);
             if ($list[$k]['retail_price'] <= 0) {
@@ -659,9 +695,13 @@ class ServerClinicModel extends Crud {
 
         // 合并重复数据
         $list = array_values(array_column($list, null, 'name'));
+        $rows = [
+            'update' => 0,
+            'insert' => 0
+        ];
 
+        // 添加药品
         $drugModel = new DrugModel($user_id);
-
         foreach ($list as $k => $v) {
             $list[$k]['id'] = $drugModel->drugExists(['name' => $v['name']]);
             $list[$k]['status'] = 1;
@@ -670,13 +710,289 @@ class ServerClinicModel extends Crud {
             if ($result['errorcode'] !== 0) {
                 return error('「' . $v['name'] . '」保存失败，请重试');
             }
+            $rows[$list[$k]['id'] ? 'update' : 'insert'] ++;
             $list[$k]['id'] = $result['result']['drug_id'];
             if ($k % 10 == 0) {
                 usleep(20000);
             }
         }
 
-        print_r($list);
+        // 入库
+        $datails = [
+            'stock_type' => StockType::PULL,
+            'stock_date' => date('Y-m-d', TIMESTAMP),
+            'stock_way' => StockWay::OTHER_PULL,
+            'remark' => '数据导入',
+            'details' => []
+        ];
+        foreach ($list as $k => $v) {
+            if ($v['amount'] > 0) {
+                $datails['details'][] = [
+                    'drug_id' => $v['id'],
+                    'amount' => $v['amount'],
+                    'purchase_price' => $v['purchase_price'],
+                    'manufactor_name' => $v['manufactor_name']
+                ];
+            }
+        }
+        if ($datails['details']) {
+            $result = (new StockModel($user_id))->addStock($datails);
+            if ($result['errorcode'] !== 0) {
+                return error('库存保存失败，请重试');
+            }
+        }
+
+        $result = [
+            '新增药品信息 ' . $rows['insert'] . ' 条,更新药品信息 ' . $rows['update'] . ' 条'
+        ];
+        if ($datails['details']) {
+            $result[] = '请在「库房管理->入库管理」入库确认';
+        }
+        unset($datails);
+        return success(implode('<br/>', $result));
+    }
+
+    /**
+     * 中药信息导入
+     * @return array
+     */
+    private function importChineseDrug($user_id, &$list)
+    {
+        $drugUnit = DictType::getDrugUnit();
+        $pinYin = new \app\library\PinYin();
+        // 效验数据
+        foreach ($list as $k => $v) {
+            if (!$v['name']) {
+                return error('[第' . ($k + 1) . '行] 中药名称不能为空！');
+            }
+            $list[$k]['py_code'] = $pinYin->get_first_py($v['name']);
+            $list[$k]['drug_type'] = DrugType::CHINESE;
+            if (!$v['package_spec']) {
+                return error('[第' . ($k + 1) . '行] 规格不能为空！');
+            }
+            if (!in_array($v['dispense_unit'], $drugUnit[DictType::UNIT_4])) {
+                return error('[第' . ($k + 1) . '行] 零售单位填写不正确！<br/>(' . implode(',', $drugUnit[DictType::UNIT_4]) . ')');
+            }
+            $list[$k]['retail_price'] = floatval($v['retail_price']);
+            if ($list[$k]['retail_price'] <= 0) {
+                return error('[第' . ($k + 1) . '行] 零售价必须大于0！');
+            }
+            $list[$k]['amount'] = intval($v['amount']);
+            if ($list[$k]['amount'] < 0) {
+                return error('[第' . ($k + 1) . '行] 入库数量不能小于0！');
+            }
+            $list[$k]['purchase_price'] = floatval($v['purchase_price']);
+            if ($list[$k]['purchase_price'] < 0) {
+                return error('[第' . ($k + 1) . '行] 进货价不能小于0！');
+            }
+            $list[$k]['usages'] = array_search($v['usages'], NoteUsage::$message);
+        }
+        unset($drugUnit);
+
+        // 合并重复数据
+        $list = array_values(array_column($list, null, 'name'));
+        $rows = [
+            'update' => 0,
+            'insert' => 0
+        ];
+
+        // 添加药品
+        $drugModel = new DrugModel($user_id);
+        foreach ($list as $k => $v) {
+            $list[$k]['id'] = $drugModel->drugExists(['name' => $v['name']]);
+            $list[$k]['status'] = 1;
+            // 保存药品
+            $result = $drugModel->saveDrug($list[$k]);
+            if ($result['errorcode'] !== 0) {
+                return error('「' . $v['name'] . '」保存失败，请重试');
+            }
+            $rows[$list[$k]['id'] ? 'update' : 'insert'] ++;
+            $list[$k]['id'] = $result['result']['drug_id'];
+            if ($k % 10 == 0) {
+                usleep(20000);
+            }
+        }
+
+        // 入库
+        $datails = [
+            'stock_type' => StockType::PULL,
+            'stock_date' => date('Y-m-d', TIMESTAMP),
+            'stock_way' => StockWay::OTHER_PULL,
+            'remark' => '数据导入',
+            'details' => []
+        ];
+        foreach ($list as $k => $v) {
+            if ($v['amount'] > 0) {
+                $datails['details'][] = [
+                    'drug_id' => $v['id'],
+                    'amount' => $v['amount'],
+                    'purchase_price' => $v['purchase_price'],
+                    'manufactor_name' => $v['manufactor_name']
+                ];
+            }
+        }
+        if ($datails['details']) {
+            $result = (new StockModel($user_id))->addStock($datails);
+            if ($result['errorcode'] !== 0) {
+                return error('库存保存失败，请重试');
+            }
+        }
+
+        $result = [
+            '新增药品信息 ' . $rows['insert'] . ' 条,更新药品信息 ' . $rows['update'] . ' 条'
+        ];
+        if ($datails['details']) {
+            $result[] = '请在「库房管理->入库管理」入库确认';
+        }
+        unset($datails);
+        return success(implode('<br/>', $result));
+    }
+
+    /**
+     * 材料信息导入
+     * @return array
+     */
+    private function importMaterialDrug($user_id, &$list)
+    {
+        $drugUnit = DictType::getDrugUnit();
+        $pinYin = new \app\library\PinYin();
+        // 效验数据
+        foreach ($list as $k => $v) {
+            if (!$v['name']) {
+                return error('[第' . ($k + 1) . '行] 材料名称不能为空！');
+            }
+            $list[$k]['py_code'] = $pinYin->get_first_py($v['name']);
+            $list[$k]['drug_type'] = DrugType::MATERIAL;
+            if (!$v['package_spec']) {
+                return error('[第' . ($k + 1) . '行] 规格不能为空！');
+            }
+            if (!in_array($v['dispense_unit'], $drugUnit[DictType::UNIT_4])) {
+                return error('[第' . ($k + 1) . '行] 零售单位填写不正确！<br/>(' . implode(',', $drugUnit[DictType::UNIT_4]) . ')');
+            }
+            $list[$k]['retail_price'] = floatval($v['retail_price']);
+            if ($list[$k]['retail_price'] <= 0) {
+                return error('[第' . ($k + 1) . '行] 零售价必须大于0！');
+            }
+            $list[$k]['amount'] = intval($v['amount']);
+            if ($list[$k]['amount'] < 0) {
+                return error('[第' . ($k + 1) . '行] 入库数量不能小于0！');
+            }
+            $list[$k]['purchase_price'] = floatval($v['purchase_price']);
+            if ($list[$k]['purchase_price'] < 0) {
+                return error('[第' . ($k + 1) . '行] 进货价不能小于0！');
+            }
+        }
+        unset($drugUnit);
+
+        // 合并重复数据
+        $list = array_values(array_column($list, null, 'name'));
+        $rows = [
+            'update' => 0,
+            'insert' => 0
+        ];
+
+        // 添加药品
+        $drugModel = new DrugModel($user_id);
+        foreach ($list as $k => $v) {
+            $list[$k]['id'] = $drugModel->drugExists(['name' => $v['name']]);
+            $list[$k]['status'] = 1;
+            // 保存药品
+            $result = $drugModel->saveDrug($list[$k]);
+            if ($result['errorcode'] !== 0) {
+                return error('「' . $v['name'] . '」保存失败，请重试');
+            }
+            $rows[$list[$k]['id'] ? 'update' : 'insert'] ++;
+            $list[$k]['id'] = $result['result']['drug_id'];
+            if ($k % 10 == 0) {
+                usleep(20000);
+            }
+        }
+
+        // 入库
+        $datails = [
+            'stock_type' => StockType::PULL,
+            'stock_date' => date('Y-m-d', TIMESTAMP),
+            'stock_way' => StockWay::OTHER_PULL,
+            'remark' => '数据导入',
+            'details' => []
+        ];
+        foreach ($list as $k => $v) {
+            if ($v['amount'] > 0) {
+                $datails['details'][] = [
+                    'drug_id' => $v['id'],
+                    'amount' => $v['amount'],
+                    'purchase_price' => $v['purchase_price'],
+                    'manufactor_name' => $v['manufactor_name']
+                ];
+            }
+        }
+        if ($datails['details']) {
+            $result = (new StockModel($user_id))->addStock($datails);
+            if ($result['errorcode'] !== 0) {
+                return error('库存保存失败，请重试');
+            }
+        }
+
+        $result = [
+            '新增材料信息 ' . $rows['insert'] . ' 条,更新材料信息 ' . $rows['update'] . ' 条'
+        ];
+        if ($datails['details']) {
+            $result[] = '请在「库房管理->入库管理」入库确认';
+        }
+        unset($datails);
+        return success(implode('<br/>', $result));
+    }
+
+    /**
+     * 诊疗项目导入
+     * @return array
+     */
+    private function importTreatment($user_id, &$list)
+    {
+        $unit = DictType::getTreatmentUnit();
+        $pinYin = new \app\library\PinYin();
+        // 效验数据
+        foreach ($list as $k => $v) {
+            if (!$v['name']) {
+                return error('[第' . ($k + 1) . '行] 项目名称不能为空！');
+            }
+            $list[$k]['py_code'] = $pinYin->get_first_py($v['name']);
+            if (!in_array($v['unit'], $unit)) {
+                return error('[第' . ($k + 1) . '行] 单位填写不正确！<br/>(' . implode(',', $unit) . ')');
+            }
+            $list[$k]['price'] = floatval($v['price']);
+            if ($list[$k]['price'] <= 0) {
+                return error('[第' . ($k + 1) . '行] 单价必须大于0！');
+            }
+            $list[$k]['royalty'] = array_search($v['royalty'], Royalty::$message);
+            $list[$k]['royalty_ratio'] = floatval($v['royalty_ratio']);
+        }
+        unset($unit);
+
+        // 合并重复数据
+        $list = array_values(array_column($list, null, 'name'));
+        $rows = [
+            'update' => 0,
+            'insert' => 0
+        ];
+
+        // 添加药品
+        $userInfo = (new AdminModel())->checkAdminInfo($user_id);
+        $treatmentModel = new TreatmentModel();
+        foreach ($list as $k => $v) {
+            $list[$k]['id'] = $treatmentModel->treatmentExists(['clinic_id' => $userInfo['clinic_id'], 'name' => $v['name']]);
+            $list[$k]['status'] = 1;
+            $result = $treatmentModel->saveTreatment($user_id, $list[$k]);
+            if ($result['errorcode'] !== 0) {
+                return error('「' . $v['name'] . '」保存失败，请重试');
+            }
+            $rows[$list[$k]['id'] ? 'update' : 'insert'] ++;
+            if ($k % 10 == 0) {
+                usleep(20000);
+            }
+        }
+
+        return success('新增诊疗项目 ' . $rows['insert'] . ' 条,更新诊疗项目 ' . $rows['update'] . ' 条');
     }
 
     /**
@@ -706,34 +1022,6 @@ class ServerClinicModel extends Crud {
         $data = mb_substr($data, 0, 200, 'UTF-8');
         $data = htmlspecialchars(rtrim($data, "\0"), ENT_QUOTES);
         return $data;
-    }
-
-    /**
-     * 导出为 csv
-     * @return fixed
-     */
-    private function exportCsv ($fileName, $header, array $list)
-    {
-        $fileName = $fileName . '_' . date('Ymd', TIMESTAMP);
-        $fileName = preg_match('/(Chrome|Firefox)/i', $_SERVER['HTTP_USER_AGENT']) && !preg_match('/edge/i', $_SERVER['HTTP_USER_AGENT']) ? $fileName : urlencode($fileName);
-
-        header('cache-control:public');
-        header('content-type:application/octet-stream');
-        header('content-disposition:attachment; filename=' . $fileName . '.csv');
-
-        $input = [$header];
-        foreach ($list as $k => $v) {
-            foreach ($v as $kk => $vv) {
-                if (false !== strpos($vv, ',')) {
-                    $v[$kk] = '"' . $vv . '"';
-                }
-            }
-            $input[] = implode(',', $v);
-        }
-        unset($list);
-
-        echo mb_convert_encoding(implode("\n", $input), 'GB2312', 'UTF-8');
-        exit(0);
     }
 
 }

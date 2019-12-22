@@ -93,7 +93,7 @@ class StockModel extends Crud {
                         $v['status'] === 1 ? '已确认' : '未确认'
                     ];
                 }
-                $this->exportCsv('入存列表', '编号,入库日期,入库方式,供应商,制单人,确认人,入库总金额,状态', $input);
+                export_csv_data('入存列表', '编号,入库日期,入库方式,供应商,制单人,确认人,入库总金额,状态', $input);
             } else if ($post['stock_type'] == StockType::PUSH) {
                 // 出库
                 foreach ($list as $k => $v) {
@@ -107,7 +107,7 @@ class StockModel extends Crud {
                         $v['status'] === 1 ? '已确认' : '未确认'
                     ];
                 }
-                $this->exportCsv('入存列表', '编号,出库日期,出库方式,领用人员,制单人,确认人,状态', $input);
+                export_csv_data('入存列表', '编号,出库日期,出库方式,领用人员,制单人,确认人,状态', $input);
             }
             exit(0);
         }
@@ -641,7 +641,7 @@ class StockModel extends Crud {
         $post['invoice']     = trim_space($post['invoice'], 0, 50);
         $post['remark']      = trim_space($post['remark'], 0, 200);
         $post['employee_id'] = $post['employee_id'] ? intval($post['employee_id']) : null;
-        $post['details']     = $post['details'] ? array_slice(json_decode(htmlspecialchars_decode($post['details']), true), 0, 1000) : [];
+        $post['details']     = $post['details'] ? (is_array($post['details']) ? $post['details'] : array_slice(json_decode(htmlspecialchars_decode($post['details']), true), 0, 1000)) : [];
 
         if (!$post['stock_type']) {
             return error('出入库类型不正确');
@@ -793,34 +793,6 @@ class StockModel extends Crud {
             $list[$v['drug_id']]['amount'] += $v['amount'];
         }
         return $list;
-    }
-
-    /**
-     * 导出为 csv
-     * @return fixed
-     */
-    private function exportCsv ($fileName, $header, array $list)
-    {
-        $fileName = $fileName . '_' . date('Ymd', TIMESTAMP);
-        $fileName = preg_match('/(Chrome|Firefox)/i', $_SERVER['HTTP_USER_AGENT']) && !preg_match('/edge/i', $_SERVER['HTTP_USER_AGENT']) ? $fileName : urlencode($fileName);
-
-        header('cache-control:public');
-        header('content-type:application/octet-stream');
-        header('content-disposition:attachment; filename=' . $fileName . '.csv');
-
-        $input = [$header];
-        foreach ($list as $k => $v) {
-            foreach ($v as $kk => $vv) {
-                if (false !== strpos($vv, ',')) {
-                    $v[$kk] = '"' . $vv . '"';
-                }
-            }
-            $input[] = implode(',', $v);
-        }
-        unset($list);
-
-        echo mb_convert_encoding(implode("\n", $input), 'GB2312', 'UTF-8');
-        exit(0);
     }
 
 }

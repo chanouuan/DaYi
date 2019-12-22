@@ -8,8 +8,9 @@ namespace app\common;
 class StockWay
 {
 
-    const AUTO_BACK = 5;
-    const AUTO_PUT  = 36;
+    const OTHER_PULL = 4;
+    const AUTO_BACK  = 5;
+    const AUTO_PUT   = 36;
 
     static $message = [
         /* 入库 */

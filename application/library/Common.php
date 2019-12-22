@@ -1084,3 +1084,29 @@ function array_curd (array $exists, array $posts)
         'update' => array_intersect($exists, $posts)
     ];
 }
+
+function export_csv_data ($fileName, $header, array $list = [])
+{
+    $fileName = $fileName . date('Ymd', TIMESTAMP);
+    $fileName = preg_match('/(Chrome|Firefox)/i', $_SERVER['HTTP_USER_AGENT']) && !preg_match('/edge/i', $_SERVER['HTTP_USER_AGENT']) ? $fileName : urlencode($fileName);
+
+    header('cache-control:public');
+    header('content-type:application/octet-stream');
+    header('content-disposition:attachment; filename=' . $fileName . '.csv');
+
+    $input = [$header];
+    foreach ($list as $k => $v) {
+        foreach ($v as $kk => $vv) {
+            if (is_numeric($vv)) {
+                $v[$kk] = $vv . "\t";
+            } else if (false !== strpos($vv, ',')) {
+                $v[$kk] = '"' . $vv . '"';
+            }
+        }
+        $input[] = implode(',', $v);
+    }
+    unset($list);
+
+    echo mb_convert_encoding(implode("\n", $input), 'GB2312', 'UTF-8');
+    exit(0);
+}
