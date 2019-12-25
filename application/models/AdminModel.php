@@ -696,7 +696,7 @@ class AdminModel extends Crud {
             return false;
         }
         if (!$this->getDb()->table('admin_permission_role')->insert([
-            'role_id' => array_fill(0, 3, $doctorRoleId),
+            'role_id' => array_fill(0, 4, $doctorRoleId),
             'permission_id' => [2, 10, 11, 12]
         ])) {
             return false;
