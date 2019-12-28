@@ -579,7 +579,7 @@ class ServerClinic extends ActionPDO {
     /**
      * 药品查询
      * @param *drug_type 药品类型
-     * @param *name 国药准字/药品名称/拼音码/五笔码/条形码
+     * @param *name
      * @return array
      * {
      * "errorcode":0,
@@ -606,6 +606,21 @@ class ServerClinic extends ActionPDO {
     public function searchTreatmentSheet ()
     {
         return (new ServerClinicModel())->searchTreatmentSheet($_POST);
+    }
+
+    /**
+     * 疾病诊断查询
+     * @param *name
+     * @return array
+     * {
+     * "errorcode":0,
+     * "message":"",
+     * "result":[]
+     * }
+     */
+    public function searchICD ()
+    {
+        return (new ServerClinicModel())->searchICD($_POST);
     }
 
     /**

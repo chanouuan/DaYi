@@ -481,6 +481,26 @@ class ServerClinicModel extends Crud {
     }
 
     /**
+     * 搜索疾病诊断
+     * @return array
+     */
+    public function searchICD ($post)
+    {
+        $post['name'] = trim_space($post['name'], 0, 20);
+        if (!$post['name']) {
+            return success([]);
+        }
+        $list = (new ICDModel())->searchICD($post['name']);
+        return success([
+            'columns' => [
+                ['key' => 'icd_code', 'value' => '编码'],
+                ['key' => 'name', 'value' => '名称']
+            ],
+            'rows' => $list
+        ]);
+    }
+
+    /**
      * 获取登录账号信息
      * @return array
      */
